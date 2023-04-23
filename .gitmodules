@@ -1,0 +1,12 @@
+[submodule "vendor/GLFW"]
+	path = vendor/GLFW
+	url = https://github.com/andrezwicky/glfw
+	branch = gameone
+[submodule "vendor/imgui"]
+	path = vendor/imgui
+	url = https://github.com/andrezwicky/imgui
+	branch = gameone
+[submodule "vendor/glm"]
+	path = vendor/glm
+	url = https://github.com/andrezwicky/glm
+	branch = gameone
