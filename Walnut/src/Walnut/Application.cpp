@@ -13,11 +13,12 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
-
+#include <L2DFileDialog.h>
 #include <iostream>
 
 // Emedded font
 #include "ImGui/Roboto-Regular.embed"
+
 
 extern bool g_ApplicationRunning;
 
@@ -461,6 +462,7 @@ namespace Walnut {
 		// Setup Dear ImGui context
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
+		ImPlot::CreateContext();
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
@@ -569,6 +571,7 @@ namespace Walnut {
 
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
+		ImPlot::DestroyContext();
 		ImGui::DestroyContext();
 
 		CleanupVulkanWindow();
