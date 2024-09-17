@@ -13,7 +13,6 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
-#include <L2DFileDialog.h>
 #include <iostream>
 
 // Emedded font
