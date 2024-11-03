@@ -8,6 +8,7 @@
 #include <functional>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "implot.h"
 #include "vulkan/vulkan.h"
 

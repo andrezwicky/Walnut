@@ -465,7 +465,7 @@ namespace Walnut {
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
 		//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-		//io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
 		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
 		//io.ConfigViewportsNoAutoMerge = true;
 		//io.ConfigViewportsNoTaskBarIcon = true;
@@ -535,18 +535,6 @@ namespace Walnut {
 			check_vk_result(err);
 			ImGui_ImplVulkan_DestroyFontUploadObjects();
 		}
-		/*
-		// Create 2nd command pool
-		{
-			VkCommandPoolCreateInfo poolCreateInfo = {};
-			poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-			poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // optional
-			poolCreateInfo.queueFamilyIndex = 0 ; // index of the queue family for which the pool is created
-
-			err = vkCreateCommandPool(g_Device, &poolCreateInfo, nullptr, &g_CommandPoolOffscreeen);
-			check_vk_result(err);
-		}
-		*/
 	}
 
 	void Application::Shutdown()
@@ -656,21 +644,21 @@ namespace Walnut {
 				// We cannot preserve the docking relationship between an active window and an inactive docking, otherwise
 				// any change of dockspace/settings would lead to windows being stuck in limbo and never being visible.
 				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-				ImGui::Begin("GameOne", nullptr, window_flags);
+				ImGui::Begin("PoroPlot", nullptr, window_flags);
 				ImGui::PopStyleVar();
 
 				ImGui::PopStyleVar(2);
 
 
-				/*
+				
 				// Submit the DockSpace
 				ImGuiIO& io = ImGui::GetIO();
 				if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
 				{
-					ImGuiID dockspace_id = ImGui::GetID("VulkanAppDockspace");
+					ImGuiID dockspace_id = ImGui::GetID("PoroPlotAppDockspace");
 					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 				}
-				*/
+				
 
 				if (m_MenubarCallback)
 				{
