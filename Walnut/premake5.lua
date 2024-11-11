@@ -15,6 +15,8 @@ project "Walnut"
       "../vendor/imgui",
       "../vendor/glfw/include",
       "../vendor/stb_image",
+      "../vendor/ImGuiTextSelect",
+      "../vendor/utfcpp",
 
       "%{IncludeDir.VulkanSDK}",
       "%{IncludeDir.glm}",
@@ -24,8 +26,9 @@ project "Walnut"
    {
        "ImGui",
        "GLFW",
+       "ImGuiTextSelect",
 
-       "%{Library.Vulkan}",
+       "%{Library.Vulkan}"
    }
 
    targetdir ("bin/" .. outputdir .. "/%{prj.name}")
