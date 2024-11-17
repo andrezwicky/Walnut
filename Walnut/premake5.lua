@@ -15,12 +15,12 @@ project "Walnut"
       "../vendor/imgui",
       "../vendor/glfw/include",
       "../vendor/stb_image",
-      "../vendor/yaml-cpp/include",
       "../vendor/ImGuiTextSelect",
       "../vendor/utfcpp",
 
       "%{IncludeDir.VulkanSDK}",
       "%{IncludeDir.glm}",
+      "%{IncludeDir.yaml_cpp}"
    }
 
    links
@@ -38,7 +38,7 @@ project "Walnut"
 
    filter "system:windows"
       systemversion "latest"
-      defines { "WL_PLATFORM_WINDOWS" }
+      defines { "WL_PLATFORM_WINDOWS", "YAML_CPP_STATIC_DEFINE" }
 
    filter "configurations:Debug"
       defines { "WL_DEBUG" }
