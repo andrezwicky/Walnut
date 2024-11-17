@@ -10,3 +10,7 @@
 	path = vendor/glm
 	url = https://github.com/andrezwicky/glm
 	branch = gameone
+[submodule "vendor/yaml-cpp"]
+	path = vendor/yaml-cpp
+	url = https://github.com/andrezwicky/yaml-cpp.git
+	branch = PoroPlot
