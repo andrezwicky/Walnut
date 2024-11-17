@@ -15,6 +15,7 @@ project "Walnut"
       "../vendor/imgui",
       "../vendor/glfw/include",
       "../vendor/stb_image",
+      "../vendor/yaml-cpp/include",
       "../vendor/ImGuiTextSelect",
       "../vendor/utfcpp",
 
@@ -26,6 +27,7 @@ project "Walnut"
    {
        "ImGui",
        "GLFW",
+       "yaml-cpp",
        "ImGuiTextSelect",
 
        "%{Library.Vulkan}"
