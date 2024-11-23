@@ -1,4 +1,5 @@
 #include "Walnut/Utils.h"
+#include <stdexcept>
 
 uint32_t Walnut::Utils::GetVulkanMemoryType(VkMemoryPropertyFlags properties, uint32_t type_bits)
 {
@@ -33,5 +34,29 @@ VkFormat Walnut::Utils::WalnutFormatToVulkanFormat(ImageFormat format)
 	case ImageFormat::RGBA32F:	return VK_FORMAT_R32G32B32A32_SFLOAT;
 	}
 	return (VkFormat)0;
+}
+uint32_t Walnut::Utils::GetGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice) {
+	uint32_t queueFamilyCount = 0;
+
+	// Query the number of queue families
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+
+	if (queueFamilyCount == 0) {
+		throw std::runtime_error("Failed to find any queue families on the physical device!");
+	}
+
+	// Retrieve the properties of each queue family
+	std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
+
+	// Find a queue family that supports graphics
+	for (uint32_t i = 0; i < queueFamilyCount; i++) {
+		if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+			return i; // Return the index of the graphics queue family
+		}
+	}
+
+	// If no graphics queue is found, throw an error
+	throw std::runtime_error("Failed to find a graphics queue family!");
 }
 

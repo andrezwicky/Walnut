@@ -16,15 +16,18 @@ namespace Walnut
 		~OffscreenImage();
 
 		VkImage GetVkImage() { return m_Image; }
-		VkImageView GetImageView() const { return m_ImageView; }
+		//VkImageView GetImageView() const { return m_ImageView; }
+		VkImageView& GetImageView() { return m_ImageView; }
+		VkFormat GetVkImageFormat() const { return Utils::WalnutFormatToVulkanFormat(m_Format); }
 		uint32_t GetWidth() const { return m_Width; }
 		uint32_t GetHeight() const { return m_Height; }
 
 	private:
+		void AllocateMemory(uint64_t size, bool makesource = false);
 		// Allocate memory for the Vulkan image.
 		// If makesource is true, the image is configured for CPU-GPU data transfers (e.g., uploading or downloading image data).
 		// Otherwise, the image is optimized for rendering or sampling.
-		void AllocateMemory(uint64_t size, bool makesource = false);
+
 		void Release();
 
 	private:
