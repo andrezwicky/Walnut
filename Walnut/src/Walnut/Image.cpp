@@ -3,52 +3,14 @@
 #include "imgui.h"
 #include "backends/imgui_impl_vulkan.h"
 
-#include "Application.h"
+#include "Walnut/Application.h"
+
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-namespace Walnut {
-
-	namespace Utils {
-
-		static uint32_t GetVulkanMemoryType(VkMemoryPropertyFlags properties, uint32_t type_bits)
-		{
-			VkPhysicalDeviceMemoryProperties prop;
-			vkGetPhysicalDeviceMemoryProperties(Application::GetPhysicalDevice(), &prop);
-			for (uint32_t i = 0; i < prop.memoryTypeCount; i++)
-			{
-				if ((prop.memoryTypes[i].propertyFlags & properties) == properties && type_bits & (1 << i))
-					return i;
-			}
-			
-			return 0xffffffff;
-		}
-
-		static uint32_t BytesPerPixel(ImageFormat format)
-		{
-			switch (format)
-			{
-				case ImageFormat::GBR3P:	return 3;
-				case ImageFormat::RGBA:		return 4;
-				case ImageFormat::RGBA32F:	return 16;
-			}
-			return 0;
-		}
-		
-		static VkFormat WalnutFormatToVulkanFormat(ImageFormat format)
-		{
-			switch (format)
-			{
-				case ImageFormat::GBR3P:	return VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM;
-				case ImageFormat::RGBA:		return VK_FORMAT_R8G8B8A8_UNORM;
-				case ImageFormat::RGBA32F:	return VK_FORMAT_R32G32B32A32_SFLOAT;
-			}
-			return (VkFormat)0;
-		}
-
-	}
-
+namespace Walnut
+{
 	Image::Image(std::string_view path)
 		: m_Filepath(path)
 	{

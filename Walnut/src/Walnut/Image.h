@@ -4,16 +4,10 @@
 #include <memory>
 
 #include "vulkan/vulkan.h"
+#include "Walnut/Utils.h"
 
-namespace Walnut {
-
-	enum class ImageFormat
-	{
-		None = 0,
-		RGBA,
-		RGBA32F,
-		GBR3P
-	};
+namespace Walnut
+{
 
 	class Image
 	{

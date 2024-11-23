@@ -33,7 +33,7 @@ extern bool g_ApplicationRunning;
 #define IMGUI_VULKAN_DEBUG_REPORT
 #endif
 
-static VkAllocationCallbacks* g_Allocator = NULL;
+static VkAllocationCallbacks*	g_Allocator = NULL;
 static VkInstance               g_Instance = VK_NULL_HANDLE;
 static VkPhysicalDevice         g_PhysicalDevice = VK_NULL_HANDLE;
 static VkDevice                 g_Device = VK_NULL_HANDLE;
@@ -51,6 +51,13 @@ static VkCommandBuffer			g_AllocatedCmdBufferOffscreen = VK_NULL_HANDLE;
 static ImGui_ImplVulkanH_Window g_MainWindowData;
 static int                      g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
+
+
+static VkImage					g_OffscreenImage;
+static VkDeviceMemory			g_OffscreenMemory;
+static VkImageView				g_OffscreenView;
+static VkFramebuffer			g_OffscreenFramebuffer;
+VkRenderPass					g_RenderPass; // Global render pass
 
 // Per-frame-in-flight
 static std::vector<std::vector<VkCommandBuffer>> s_AllocatedCommandBuffers;
@@ -238,7 +245,7 @@ static void SetupVulkanWindow(ImGui_ImplVulkanH_Window* wd, VkSurfaceKHR surface
 	}
 
 	// Select Surface Format
-	const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_B8G8R8A8_UNORM }; //VK_FORMAT_R8G8B8_UNORM
+	const VkFormat requestSurfaceImageFormat[] = { VK_FORMAT_R8G8B8_UNORM }; //VK_FORMAT_R8G8B8_UNORM
 	const VkColorSpaceKHR requestSurfaceColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
 	wd->SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(g_PhysicalDevice, wd->Surface, requestSurfaceImageFormat, (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat), requestSurfaceColorSpace);
 
@@ -394,10 +401,145 @@ static void glfw_error_callback(int error, const char* description)
 	fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
-namespace Walnut {
+uint32_t FindMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+	// Query the physical device memory properties
+	VkPhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(g_PhysicalDevice, &memProperties);
 
-	Application::Application(const ApplicationSpecification& specification)
-		: m_Specification(specification)
+	// Loop through all available memory types
+	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+		// Check if the typeFilter includes this memory type
+		if ((typeFilter & (1 << i)) &&
+			// Check if the memory type matches the desired properties
+			(memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+			return i; // Return the index of a compatible memory type
+		}
+	}
+
+	// If no suitable memory type is found, throw an error
+	throw std::runtime_error("Failed to find a suitable memory type!");
+}
+
+void CreateFramebuffer(VkRenderPass renderPass, uint32_t width, uint32_t height)
+{
+	VkFramebufferCreateInfo framebufferInfo = {};
+	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass = renderPass;           // The render pass this framebuffer is for
+	framebufferInfo.attachmentCount = 1;              // Number of attachments (color only)
+	framebufferInfo.pAttachments = &g_OffscreenView;  // Attach the offscreen image view
+	framebufferInfo.width = width;                    // Framebuffer dimensions
+	framebufferInfo.height = height;
+	framebufferInfo.layers = 1;                       // Single layer (not a 3D image)
+
+	if (vkCreateFramebuffer(g_Device, &framebufferInfo, nullptr, &g_OffscreenFramebuffer) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to create offscreen framebuffer!");
+	}
+}
+
+void CreateRenderPass()
+{
+	// Attachment description
+	VkAttachmentDescription colorAttachment = {};
+	colorAttachment.format = VK_FORMAT_B8G8R8A8_UNORM;                 // Format of the offscreen image
+	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;                  // No multisampling
+	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;             // Clear the image at the start
+	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;           // Store the rendered image
+	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;  // No stencil
+	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;        // Undefined initial layout
+	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // For color output
+
+	// Attachment reference
+	VkAttachmentReference colorAttachmentRef = {};
+	colorAttachmentRef.attachment = 0;  // Index of the color attachment
+	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	// Subpass
+	VkSubpassDescription subpass = {};
+	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;  // Graphics pipeline
+	subpass.colorAttachmentCount = 1;                            // Attachments used by this subpass
+	subpass.pColorAttachments = &colorAttachmentRef;             // Color attachment reference
+
+	// Subpass dependency
+	VkSubpassDependency dependency = {};
+	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;                 // Before render pass starts
+	dependency.dstSubpass = 0;                                   // Index of the subpass
+	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.srcAccessMask = 0;
+	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+	// Render pass
+	VkRenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassInfo.attachmentCount = 1;                          // One attachment
+	renderPassInfo.pAttachments = &colorAttachment;              // Pointer to the attachment
+	renderPassInfo.subpassCount = 1;                             // One subpass
+	renderPassInfo.pSubpasses = &subpass;                        // Pointer to the subpass
+	renderPassInfo.dependencyCount = 1;                          // One dependency
+	renderPassInfo.pDependencies = &dependency;                  // Pointer to the dependency
+
+	if (vkCreateRenderPass(g_Device, &renderPassInfo, nullptr, &g_RenderPass) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to create render pass!");
+	}
+}
+
+void RecordCommandBuffer(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer, VkRenderPass renderPass, uint32_t width, uint32_t height)
+{
+	// Reset command buffer to ensure it’s in the READY state
+	if (vkResetCommandBuffer(commandBuffer, 0) != VK_SUCCESS)
+		throw std::runtime_error("Failed to reset command buffer!");
+
+
+	VkCommandBufferBeginInfo beginInfo = {};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+	if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to begin recording command buffer!");
+	}
+
+	// Begin render pass
+	VkRenderPassBeginInfo renderPassInfo = {};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.renderPass = renderPass;
+	renderPassInfo.framebuffer = framebuffer;
+	renderPassInfo.renderArea.offset = { 0, 0 };
+	renderPassInfo.renderArea.extent = { width, height };
+
+	// Clear values
+	VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} }; // Clear to black
+	renderPassInfo.clearValueCount = 1;
+	renderPassInfo.pClearValues = &clearColor;
+
+	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	// Insert ImGui rendering here
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+
+	vkCmdEndRenderPass(commandBuffer);
+
+	if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to record command buffer!");
+	}
+}
+
+void CreateOffscreenCommandPool()
+{
+	VkCommandPoolCreateInfo poolInfo = {};
+	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	poolInfo.queueFamilyIndex = g_QueueFamily; // Use the same queue family as the app's main pool
+	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // Optional, allows buffer reset
+
+	if (vkCreateCommandPool(g_Device, &poolInfo, nullptr, &g_CommandPoolOffscreeen) != VK_SUCCESS)
+		throw std::runtime_error("Failed to create offscreen command pool!");
+}
+
+
+namespace Walnut
+{
+
+	Application::Application(const ApplicationSpecification& specification, const OffscreenImageSpec& offscreenSpec)
+		: m_Specification(specification), m_OffscreenSpec(offscreenSpec)
 	{
 		s_Instance = this;
 
@@ -441,6 +583,11 @@ namespace Walnut {
 		}
 		uint32_t extensions_count = 0;
 		const char** extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
+
+		//vkCreateImage();
+
+
+
 
 		SetupVulkan(extensions, extensions_count);
 
@@ -500,6 +647,73 @@ namespace Walnut {
 		init_info.Allocator = g_Allocator;
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
+
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+		CreateOffscreenCommandPool();
+		CreateRenderPass();
+
+		// Setup Offscreen image
+		VkImageCreateInfo imageInfo = {};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.format = VK_FORMAT_B8G8R8A8_UNORM;  // Use a format suitable for rendering
+		imageInfo.extent.width = m_OffscreenSpec.Width;              // Set the desired width of the image
+		imageInfo.extent.height = m_OffscreenSpec.Height;            // Set the desired height of the image
+		imageInfo.extent.depth = 1;                  // This is a 2D image, so depth is 1
+		imageInfo.mipLevels = 1;                     // No mipmapping needed for offscreen
+		imageInfo.arrayLayers = 1;                   // Single image layer
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;  // No multisampling for simplicity
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;  // Optimal tiling for a render target
+		imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		// Render target and read back
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // Exclusive for single queue
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; // Undefined initial layout
+
+		if (vkCreateImage(g_Device, &imageInfo, nullptr, &g_OffscreenImage) != VK_SUCCESS)
+			throw std::runtime_error("Failed to create offscreen image!");
+
+		// Allocate memory for the image
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(g_Device, g_OffscreenImage, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo = {};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = FindMemoryTypeIndex(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		if (vkAllocateMemory(g_Device, &allocInfo, nullptr, &g_OffscreenMemory) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to allocate memory for offscreen image!");
+		}
+
+		// Bind the memory to the image
+		vkBindImageMemory(g_Device, g_OffscreenImage, g_OffscreenMemory, 0);
+
+		VkImageViewCreateInfo viewInfo = {};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = g_OffscreenImage;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = VK_FORMAT_B8G8R8A8_UNORM; // Must match the image format
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // Color image
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(g_Device, &viewInfo, nullptr, &g_OffscreenView) != VK_SUCCESS)
+			throw std::runtime_error("Failed to create image view for offscreen image!");
+	
+
+		CreateFramebuffer(wd->RenderPass, m_OffscreenSpec.Width, m_OffscreenSpec.Height);
+
+		
+
+
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 		// Load default font
 		ImFontConfig fontConfig;
@@ -687,6 +901,11 @@ namespace Walnut {
 			wd->ClearValue.color.float32[3] = clear_color.w;
 			if (!main_is_minimized)
 				FrameRender(wd, main_draw_data);
+
+			RecordCommandBuffer(GetCommandBufferOffscreen(true), g_OffscreenFramebuffer, wd->RenderPass, m_OffscreenSpec.Width, m_OffscreenSpec.Height);
+
+
+
 
 			// Update and Render additional Platform Windows
 			if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)

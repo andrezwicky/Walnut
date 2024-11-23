@@ -1,0 +1,52 @@
+#pragma once
+#include <iostream>
+#include <string>
+#include <memory>
+
+#include "vulkan/vulkan.h"
+#include "Walnut/Utils.h"
+
+
+namespace Walnut
+{
+	class OffscreenImage
+	{
+	public:
+		OffscreenImage(uint32_t width, uint32_t height, ImageFormat format);
+		~OffscreenImage();
+
+		VkImage GetVkImage() { return m_Image; }
+		VkImageView GetImageView() const { return m_ImageView; }
+		uint32_t GetWidth() const { return m_Width; }
+		uint32_t GetHeight() const { return m_Height; }
+
+	private:
+		// Allocate memory for the Vulkan image.
+		// If makesource is true, the image is configured for CPU-GPU data transfers (e.g., uploading or downloading image data).
+		// Otherwise, the image is optimized for rendering or sampling.
+		void AllocateMemory(uint64_t size, bool makesource = false);
+		void Release();
+
+	private:
+		ImageFormat m_Format = ImageFormat::None;
+		uint32_t m_Width = 0, m_Height = 0;
+
+		VkImage m_Image = nullptr;
+		VkImageView m_ImageView = nullptr;
+		VkDeviceMemory m_Memory = nullptr;
+
+		
+
+		VkBuffer m_StagingBuffer = nullptr;
+		VkDeviceMemory m_StagingBufferMemory = nullptr;
+
+		VkBuffer m_unStagingBuffer = nullptr;
+		VkDeviceMemory m_unStagingBufferMemory = nullptr;
+
+		size_t m_AlignedSize = 0;
+
+		VkDescriptorSet m_DescriptorSet = nullptr;
+	};
+}
+
+

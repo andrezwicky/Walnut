@@ -18,6 +18,8 @@ struct GLFWwindow;
 
 namespace Walnut {
 
+
+
 	struct ApplicationSpecification
 	{
 		std::string Name = "Walnut App";
@@ -25,10 +27,17 @@ namespace Walnut {
 		uint32_t Height = 900;
 	};
 
+	struct OffscreenImageSpec
+	{
+		std::string Name = "Offscreen Image";
+		uint32_t Width = 1600;
+		uint32_t Height = 900;
+	};
+
 	class Application
 	{
 	public:
-		Application(const ApplicationSpecification& applicationSpecification = ApplicationSpecification());
+		Application(const ApplicationSpecification& applicationSpecification = ApplicationSpecification(), const OffscreenImageSpec& offscreenSpec = OffscreenImageSpec());
 		~Application();
 
 		static Application& Get();
@@ -67,6 +76,8 @@ namespace Walnut {
 		ApplicationSpecification m_Specification;
 		GLFWwindow* m_WindowHandle = nullptr;
 		bool m_Running = false;
+
+		OffscreenImageSpec m_OffscreenSpec;
 
 		float m_TimeStep = 0.0f;
 		float m_FrameTime = 0.0f;
