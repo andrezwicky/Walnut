@@ -23,6 +23,11 @@ namespace Walnut
         VkCommandPool commandPool;
         VkCommandBuffer commandBuffer;
 
+        VkShaderModule m_VertShaderModule = VK_NULL_HANDLE;
+        VkShaderModule m_FragShaderModule = VK_NULL_HANDLE;
+
+        VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+
         OffscreenImage& offscreenImage; // Reference to the offscreen image
 
         void CreateRenderPass();

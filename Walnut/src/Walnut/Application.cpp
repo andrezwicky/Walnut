@@ -17,6 +17,8 @@
 
 // Emedded font
 #include "ImGui/Roboto-Regular.embed"
+#include "OffscreenImage.h"
+#include "OffscreenPipeline.h"
 
 
 extern bool g_ApplicationRunning;
@@ -548,6 +550,10 @@ namespace Walnut
 
 	Application::~Application()
 	{
+		if (m_OffscreenPipeline)
+			delete m_OffscreenPipeline;
+		if (m_OffscreenImage)
+			delete m_OffscreenImage;
 		Shutdown();
 
 		s_Instance = nullptr;
@@ -583,11 +589,6 @@ namespace Walnut
 		}
 		uint32_t extensions_count = 0;
 		const char** extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
-
-		//vkCreateImage();
-
-
-
 
 		SetupVulkan(extensions, extensions_count);
 
@@ -648,6 +649,11 @@ namespace Walnut
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
 
+		m_OffscreenImage = new OffscreenImage(800, 600, ImageFormat::RGBA);
+		m_OffscreenPipeline = new OffscreenPipeline(g_Queue, *m_OffscreenImage);
+
+		//OffscreenImage offscreenImage(800, 600, ImageFormat::RGBA); // Example dimensions and format
+		//OffscreenPipeline offscreenPipeline(g_Queue, offscreenImage);
 
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -779,6 +785,10 @@ namespace Walnut
 
 		CleanupVulkanWindow();
 		CleanupVulkan();
+
+
+
+
 
 		glfwDestroyWindow(m_WindowHandle);
 		glfwTerminate();

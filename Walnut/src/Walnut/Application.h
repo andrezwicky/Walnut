@@ -12,13 +12,18 @@
 #include "implot.h"
 #include "vulkan/vulkan.h"
 
+
 void check_vk_result(VkResult err);
 
 struct GLFWwindow;
 
-namespace Walnut {
 
 
+namespace Walnut
+{
+
+	class OffscreenImage;
+	class OffscreenPipeline;
 
 	struct ApplicationSpecification
 	{
@@ -58,6 +63,10 @@ namespace Walnut {
 
 		float GetTime();
 		GLFWwindow* GetWindowHandle() const { return m_WindowHandle; }
+		
+		OffscreenImage& GetOffScreenImage() { return *m_OffscreenImage; }
+		OffscreenPipeline& GetOffScreenPipeline() { return *m_OffscreenPipeline; }
+
 
 		static VkInstance GetInstance();
 		static VkPhysicalDevice GetPhysicalDevice();
@@ -77,6 +86,8 @@ namespace Walnut {
 		GLFWwindow* m_WindowHandle = nullptr;
 		bool m_Running = false;
 
+		OffscreenImage* m_OffscreenImage = nullptr;
+		OffscreenPipeline* m_OffscreenPipeline = nullptr;
 		OffscreenImageSpec m_OffscreenSpec;
 
 		float m_TimeStep = 0.0f;

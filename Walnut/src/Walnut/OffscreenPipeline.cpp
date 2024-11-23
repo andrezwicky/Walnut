@@ -2,6 +2,9 @@
 #include "Walnut/Utils.h"
 #include <backends/imgui_impl_vulkan.h>
 
+#include "imgui.h"
+#include <array>
+
 namespace Walnut
 {
 
@@ -22,6 +25,21 @@ namespace Walnut
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
         vkDestroyCommandPool(device, commandPool, nullptr);
+
+        // Cleanup descriptor set layout after pipeline creation
+        vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
+
+        if (m_VertShaderModule)
+        {
+            vkDestroyShaderModule(device, m_VertShaderModule, nullptr);
+            m_VertShaderModule = VK_NULL_HANDLE;
+        }
+
+        if (m_FragShaderModule)
+        {
+            vkDestroyShaderModule(device, m_FragShaderModule, nullptr);
+            m_FragShaderModule = VK_NULL_HANDLE;
+        }
     }
     void OffscreenPipeline::CreateRenderPass()
     {
@@ -74,6 +92,39 @@ namespace Walnut
     {
         VkDevice device = Walnut::Application::GetDevice();
 
+        // Define the Descriptor Set Layout (Step 1)
+        VkDescriptorSetLayoutBinding samplerBinding = {};
+        samplerBinding.binding = 0;                                 // Binding 0 in the shader
+        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerBinding.descriptorCount = 1;                        // One texture sampler
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;  // Used in the fragment shader
+        samplerBinding.pImmutableSamplers = nullptr;               // No immutable samplers
+
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {};
+        descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        descriptorSetLayoutInfo.bindingCount = 1;
+        descriptorSetLayoutInfo.pBindings = &samplerBinding;
+
+        if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create descriptor set layout!");
+
+        // Push Constant Range (if used)
+        VkPushConstantRange pushConstantRange = {};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(float) * 4;
+
+        // Create Pipeline Layout (Step 2)
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1; // Reference descriptor set layout
+        pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;             // Reference push constant range
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create pipeline layout!");
+
         size_t vertShaderSize = 0;
         const uint32_t* vertShaderCode = GetImGuiVertexShader(&vertShaderSize);
 
@@ -81,51 +132,76 @@ namespace Walnut
         const uint32_t* fragShaderCode = GetImGuiFragmentShader(&fragShaderSize);
 
         // === Shader Module Creation ===
-        VkShaderModule vertShaderModule;
         VkShaderModuleCreateInfo vertInfo = {};
         vertInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        vertInfo.codeSize = sizeof(vertShaderSize); // Use ImGui's embedded vertex shader
+        vertInfo.codeSize = vertShaderSize;
         vertInfo.pCode = vertShaderCode;
-        vkCreateShaderModule(device, &vertInfo, nullptr, &vertShaderModule);
+        if (vkCreateShaderModule(device, &vertInfo, nullptr, &m_VertShaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create vertex shader module!");
+        }
 
-        VkShaderModule fragShaderModule;
         VkShaderModuleCreateInfo fragInfo = {};
         fragInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        fragInfo.codeSize = sizeof(fragShaderSize); // Use ImGui's embedded fragment shader
+        fragInfo.codeSize = fragShaderSize;
         fragInfo.pCode = fragShaderCode;
-        vkCreateShaderModule(device, &fragInfo, nullptr, &fragShaderModule);
+        if (vkCreateShaderModule(device, &fragInfo, nullptr, &m_FragShaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create fragment shader module!");
+        }
 
         VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
         vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = vertShaderModule;
-        vertShaderStageInfo.pName = "main"; // Entry point of the vertex shader
+        vertShaderStageInfo.module = m_VertShaderModule;
+        vertShaderStageInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
         fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = fragShaderModule;
-        fragShaderStageInfo.pName = "main"; // Entry point of the fragment shader
+        fragShaderStageInfo.module = m_FragShaderModule;
+        fragShaderStageInfo.pName = "main";
 
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-        // === Pipeline Configuration ===
-        // Vertex Input
+        // === Vertex Input State ===
+        VkVertexInputBindingDescription bindingDescription = {};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(ImDrawVert);
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions = {};
+
+        // Position attribute (location 0)
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(ImDrawVert, pos);
+
+        // UV attribute (location 1)
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(ImDrawVert, uv);
+
+        // Color attribute (location 2)
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+        attributeDescriptions[2].offset = offsetof(ImDrawVert, col);
+
         VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        // Use ImGui's settings if available, or configure your own
-        vertexInputInfo.vertexBindingDescriptionCount = 0;
-        vertexInputInfo.pVertexBindingDescriptions = nullptr;
-        vertexInputInfo.vertexAttributeDescriptionCount = 0;
-        vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
-        // Input Assembly
+        // === Input Assembly State ===
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        // Viewport and Scissor
+        // === Viewport State ===
         VkViewport viewport = {};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -145,7 +221,7 @@ namespace Walnut
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
-        // Rasterizer
+        // === Rasterization State ===
         VkPipelineRasterizationStateCreateInfo rasterizer = {};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
@@ -156,13 +232,13 @@ namespace Walnut
         rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
-        // Multisampling
+        // === Multisample State ===
         VkPipelineMultisampleStateCreateInfo multisampling = {};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // Color Blending
+        // === Color Blend State ===
         VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -180,15 +256,7 @@ namespace Walnut
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // Pipeline Layout
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 0;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-
-        vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
-
-        // Pipeline Creation
+        // === Create Pipeline ===
         VkGraphicsPipelineCreateInfo pipelineInfo = {};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
@@ -203,12 +271,14 @@ namespace Walnut
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
 
-        vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create graphics pipeline!");
+        }
 
-        // Cleanup Shader Modules
-        vkDestroyShaderModule(device, vertShaderModule, nullptr);
-        vkDestroyShaderModule(device, fragShaderModule, nullptr);
+
     }
+
+
     void OffscreenPipeline::AllocateCommandBuffer() {
         VkDevice device = Walnut::Application::GetDevice();
         VkPhysicalDevice physicalDevice = Application::GetPhysicalDevice();
