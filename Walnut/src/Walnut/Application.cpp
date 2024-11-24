@@ -725,8 +725,20 @@ namespace Walnut
 		// Load default font
 		ImFontConfig fontConfig;
 		fontConfig.FontDataOwnedByAtlas = false;
+		fontConfig.RasterizerDensity = 1.2;
+		fontConfig.OversampleH = 2;
+		fontConfig.OversampleV = 2;
+		//fontConfig.
 		ImFont* robotoFont = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f, &fontConfig);
 		io.FontDefault = robotoFont;
+
+		ImFontConfig fontConfig_sharper = fontConfig;
+		//fontConfig_sharper.FontDataOwnedByAtlas = true;
+		fontConfig_sharper.RasterizerMultiply = 1.5;
+		fontConfig_sharper.RasterizerDensity = 2.0;
+		fontConfig_sharper.OversampleH = 5;
+		fontConfig_sharper.OversampleV = 5;
+		ImFont* robotoFont_sharper = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f, &fontConfig_sharper);
 
 		// Upload Fonts
 		{
