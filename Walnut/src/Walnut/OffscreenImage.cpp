@@ -104,9 +104,11 @@ namespace Walnut
 
     void OffscreenImage::ReadBack(void* data, size_t dataSize)
     {
-        VkDevice device = Walnut::Application::GetDevice();
+        std::cout << "Debug: Starting image readback, size: " << dataSize << " bytes" << std::endl;
 
-        // Create a staging buffer
+        VkDevice device = Application::GetDevice();
+
+        // Create a staging buffer for readback
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
 
@@ -116,8 +118,11 @@ namespace Walnut
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        if (vkCreateBuffer(device, &bufferInfo, nullptr, &stagingBuffer) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create staging buffer!");
+        VkResult err = vkCreateBuffer(device, &bufferInfo, nullptr, &stagingBuffer);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to create staging buffer" << std::endl;
+            return;
+        }
 
         VkMemoryRequirements memRequirements;
         vkGetBufferMemoryRequirements(device, stagingBuffer, &memRequirements);
@@ -125,21 +130,24 @@ namespace Walnut
         VkMemoryAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = Utils::FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        allocInfo.memoryTypeIndex = Utils::FindMemoryType(
+            memRequirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+        );
 
-        if (vkAllocateMemory(device, &allocInfo, nullptr, &stagingBufferMemory) != VK_SUCCESS)
-            throw std::runtime_error("Failed to allocate staging buffer memory!");
+        err = vkAllocateMemory(device, &allocInfo, nullptr, &stagingBufferMemory);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to allocate staging buffer memory" << std::endl;
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            return;
+        }
 
         vkBindBufferMemory(device, stagingBuffer, stagingBufferMemory, 0);
 
-        auto& commandPool = *Walnut::Application::Get().GetCommandPool();
-        // Create a command buffer for the copy operation
+        // Copy image to buffer
+        auto& commandPool = *Application::Get().GetCommandPool();
         VkCommandBuffer commandBuffer = BeginSingleTimeCommands(&commandPool);
 
-        // Transition image layout to transfer src
-        TransitionImageLayout(commandBuffer, m_Image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-        // Copy image to staging buffer
         VkBufferImageCopy region = {};
         region.bufferOffset = 0;
         region.bufferRowLength = 0;
@@ -151,23 +159,36 @@ namespace Walnut
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = { m_Width, m_Height, 1 };
 
-        vkCmdCopyImageToBuffer(commandBuffer, m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
+        std::cout << "Debug: Copying image to buffer, dimensions: " << m_Width << "x" << m_Height << std::endl;
 
-        // Transition image layout back to color attachment
-        TransitionImageLayout(commandBuffer, m_Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        vkCmdCopyImageToBuffer(
+            commandBuffer,
+            m_Image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            stagingBuffer,
+            1,
+            &region
+        );
 
-        auto& queue = *Walnut::Application::Get().GetQueue();
+        auto& queue = *Application::Get().GetQueue();
         EndSingleTimeCommands(commandBuffer, &commandPool, &queue);
 
-        // Map memory and copy to CPU buffer
+        // Read data from staging buffer
         void* mappedData;
-        vkMapMemory(device, stagingBufferMemory, 0, dataSize, 0, &mappedData);
+        err = vkMapMemory(device, stagingBufferMemory, 0, dataSize, 0, &mappedData);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to map memory" << std::endl;
+            return;
+        }
+
         memcpy(data, mappedData, dataSize);
         vkUnmapMemory(device, stagingBufferMemory);
 
-        // Clean up staging buffer
+        // Cleanup
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
+
+        std::cout << "Debug: Successfully completed image readback" << std::endl;
     }
 
     void OffscreenImage::TransitionImageLayout(

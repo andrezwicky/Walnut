@@ -45,15 +45,20 @@ namespace Walnut
     {
         VkDevice device = Walnut::Application::GetDevice();
 
+        std::cout << "Debug: Creating render pass" << std::endl;
+
         VkAttachmentDescription colorAttachment = {};
-        colorAttachment.format = offscreenImage.GetVkImageFormat(); // Use the format of the OffscreenImage
+        colorAttachment.format = offscreenImage.GetVkImageFormat();
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;  // Clear buffer at start
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        std::cout << "Debug: Color attachment format: " << colorAttachment.format << std::endl;
+
 
         VkAttachmentReference colorAttachmentRef = {};
         colorAttachmentRef.attachment = 0;
@@ -72,6 +77,8 @@ namespace Walnut
         renderPassInfo.pSubpasses = &subpass;
 
         vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass);
+
+        std::cout << "Debug: Render pass created successfully" << std::endl;
     }
     void OffscreenPipeline::CreateFramebuffer()
     {
@@ -90,149 +97,131 @@ namespace Walnut
     }
     void OffscreenPipeline::CreatePipeline()
     {
-        VkDevice device = Walnut::Application::GetDevice();
+        auto const& device = Application::GetDevice();
+        std::cout << "Debug: Creating pipeline with image dimensions: "
+            << offscreenImage.GetWidth() << "x" << offscreenImage.GetHeight() << std::endl;
 
-        // Define the Descriptor Set Layout (Step 1)
-        VkDescriptorSetLayoutBinding samplerBinding = {};
-        samplerBinding.binding = 0;
-        samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerBinding.descriptorCount = 1;
-        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        samplerBinding.pImmutableSamplers = nullptr;
+        // Debug print shader code sizes
+        size_t vertSize = 0, fragSize = 0;
+        const uint32_t* vertCode = GetImGuiVertexShader(&vertSize);
+        const uint32_t* fragCode = GetImGuiFragmentShader(&fragSize);
+        std::cout << "Debug: Vertex shader size: " << vertSize << ", Fragment shader size: " << fragSize << std::endl;
 
-        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {};
-        descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        descriptorSetLayoutInfo.bindingCount = 1;
-        descriptorSetLayoutInfo.pBindings = &samplerBinding;
+        // Create shader modules with verification
+        VkShaderModuleCreateInfo vertInfo = {};
+        vertInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        vertInfo.codeSize = vertSize;
+        vertInfo.pCode = vertCode;
 
-        if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create descriptor set layout!");
+        VkShaderModuleCreateInfo fragInfo = {};
+        fragInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        fragInfo.codeSize = fragSize;
+        fragInfo.pCode = fragCode;
 
-        // Push Constant Range (if used)
-        VkPushConstantRange pushConstantRange = {};
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        pushConstantRange.offset = 0;
-        pushConstantRange.size = sizeof(float) * 4;
+        VkResult err;
+        err = vkCreateShaderModule(device, &vertInfo, nullptr, &m_VertShaderModule);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to create vertex shader module" << std::endl;
+            return;
+        }
 
-        // Create Pipeline Layout (Step 2)
+        err = vkCreateShaderModule(device, &fragInfo, nullptr, &m_FragShaderModule);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to create fragment shader module" << std::endl;
+            return;
+        }
+
+        std::cout << "Debug: Shader modules created successfully" << std::endl;
+
+        // Create Descriptor Set Layout
+        VkDescriptorSetLayoutBinding binding = {};
+        binding.binding = 0;
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &binding;
+
+        err = vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_DescriptorSetLayout);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to create descriptor set layout" << std::endl;
+            return;
+        }
+
+        // Create Pipeline Layout with Push Constants
+        VkPushConstantRange pushConstant = {};
+        pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstant.offset = 0;
+        pushConstant.size = sizeof(float) * 4;  // 2 vec2s: scale and translate
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
         pipelineLayoutInfo.pushConstantRangeCount = 1;
-        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create pipeline layout!");
-
-        size_t vertShaderSize = 0;
-        const uint32_t* vertShaderCode = GetImGuiVertexShader(&vertShaderSize);
-
-        size_t fragShaderSize = 0;
-        const uint32_t* fragShaderCode = GetImGuiFragmentShader(&fragShaderSize);
-
-        // === Shader Module Creation ===
-        VkShaderModuleCreateInfo vertInfo = {};
-        vertInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        vertInfo.codeSize = vertShaderSize;
-        vertInfo.pCode = vertShaderCode;
-        if (vkCreateShaderModule(device, &vertInfo, nullptr, &m_VertShaderModule) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create vertex shader module!");
+        err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to create pipeline layout" << std::endl;
+            return;
         }
 
-        VkShaderModuleCreateInfo fragInfo = {};
-        fragInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        fragInfo.codeSize = fragShaderSize;
-        fragInfo.pCode = fragShaderCode;
-        if (vkCreateShaderModule(device, &fragInfo, nullptr, &m_FragShaderModule) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create fragment shader module!");
-        }
+        std::cout << "Debug: Pipeline layout created successfully" << std::endl;
 
-        VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
-        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-        vertShaderStageInfo.module = m_VertShaderModule;
-        vertShaderStageInfo.pName = "main";
+        // Create Pipeline
+        VkPipelineShaderStageCreateInfo stages[2] = {};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = m_VertShaderModule;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = m_FragShaderModule;
+        stages[1].pName = "main";
 
-        VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
-        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        fragShaderStageInfo.module = m_FragShaderModule;
-        fragShaderStageInfo.pName = "main";
+        VkVertexInputBindingDescription bindingDesc = {};
+        bindingDesc.binding = 0;
+        bindingDesc.stride = sizeof(ImDrawVert);
+        bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-        VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+        VkVertexInputAttributeDescription attributeDesc[3] = {};
+        attributeDesc[0].location = 0;
+        attributeDesc[0].binding = binding.binding;
+        attributeDesc[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDesc[0].offset = offsetof(ImDrawVert, pos);
 
-        // === Vertex Input State ===
-        VkVertexInputBindingDescription bindingDescription = {};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(ImDrawVert);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        attributeDesc[1].location = 1;
+        attributeDesc[1].binding = binding.binding;
+        attributeDesc[1].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDesc[1].offset = offsetof(ImDrawVert, uv);
 
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions = {};
-
-        // Position attribute (location 0)
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(ImDrawVert, pos);
-
-        // UV attribute (location 1)
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(ImDrawVert, uv);
-
-        // Color attribute (location 2)
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R8G8B8A8_UNORM;
-        attributeDescriptions[2].offset = offsetof(ImDrawVert, col);
+        attributeDesc[2].location = 2;
+        attributeDesc[2].binding = binding.binding;
+        attributeDesc[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+        attributeDesc[2].offset = offsetof(ImDrawVert, col);
 
         VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vertexInputInfo.vertexBindingDescriptionCount = 1;
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDesc;
+        vertexInputInfo.vertexAttributeDescriptionCount = 3;
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDesc;
 
-        // === Input Assembly State ===
         VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-        // === Viewport State ===
-        VkViewport viewport = {};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = (float)offscreenImage.GetWidth();
-        viewport.height = (float)offscreenImage.GetHeight();
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        VkRect2D scissor = {};
-        scissor.offset = { 0, 0 };
-        scissor.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
-
+        // Viewport and scissor are dynamic
         VkPipelineViewportStateCreateInfo viewportState = {};
         viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportState.viewportCount = 1;
-        viewportState.pViewports = &viewport;
         viewportState.scissorCount = 1;
-        viewportState.pScissors = &scissor;
 
-        // === Dynamic State ===
-        std::array<VkDynamicState, 2> dynamicStates = {
-            VK_DYNAMIC_STATE_VIEWPORT,
-            VK_DYNAMIC_STATE_SCISSOR
-        };
-
-        VkPipelineDynamicStateCreateInfo dynamicState = {};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-        dynamicState.pDynamicStates = dynamicStates.data();
-
-        // === Rasterization State ===
         VkPipelineRasterizationStateCreateInfo rasterizer = {};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
@@ -240,16 +229,14 @@ namespace Walnut
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_NONE;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
-        // === Multisample State ===
         VkPipelineMultisampleStateCreateInfo multisampling = {};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // === Color Blend State ===
         VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
         colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -258,7 +245,7 @@ namespace Walnut
         colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
         colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
         colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 
         VkPipelineColorBlendStateCreateInfo colorBlending = {};
@@ -267,25 +254,35 @@ namespace Walnut
         colorBlending.attachmentCount = 1;
         colorBlending.pAttachments = &colorBlendAttachment;
 
-        // === Create Pipeline ===
+        VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates = dynamicStates;
+
         VkGraphicsPipelineCreateInfo pipelineInfo = {};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = shaderStages;
+        pipelineInfo.pStages = stages;
         pipelineInfo.pVertexInputState = &vertexInputInfo;
         pipelineInfo.pInputAssemblyState = &inputAssembly;
         pipelineInfo.pViewportState = &viewportState;
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
-        pipelineInfo.pDynamicState = &dynamicState; // Enable dynamic state here
+        pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = pipelineLayout;
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create graphics pipeline!");
+        err = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to create graphics pipeline" << std::endl;
+            return;
         }
+
+        std::cout << "Debug: Pipeline created successfully" << std::endl;
     }
 
 
@@ -311,31 +308,70 @@ namespace Walnut
     }
     void OffscreenPipeline::UploadDrawData(ImDrawData* drawData)
     {
-        auto const& device = Application::GetDevice();
-        if (!drawData || drawData->TotalVtxCount == 0) return;
+        // Validate input data
+        std::cout << "Debug: Starting UploadDrawData" << std::endl;
+        if (!drawData || drawData->TotalVtxCount == 0)
+        {
+            std::cout << "Error: Invalid draw data" << std::endl;
+            return;
+        }
 
-        // Calculate required buffer sizes
+        VkDevice device = Application::GetDevice();
+
+        // Calculate buffer sizes
         VkDeviceSize vertexBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
         VkDeviceSize indexBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
 
+        std::cout << "Debug: Creating buffers - Vertex size: " << vertexBufferSize
+            << ", Index size: " << indexBufferSize << std::endl;
+
         // Create or resize vertex buffer
-        if (vertexBuffer == VK_NULL_HANDLE || vertexBufferSize > currentVertexBufferSize) {
-            CreateOrResizeBuffer(vertexBuffer, vertexBufferMemory, currentVertexBufferSize, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        if (vertexBuffer == VK_NULL_HANDLE || currentVertexBufferSize < vertexBufferSize)
+        {
+            if (vertexBuffer != VK_NULL_HANDLE)
+            {
+                std::cout << "Debug: Recreating vertex buffer" << std::endl;
+                vkDestroyBuffer(device, vertexBuffer, nullptr);
+                vkFreeMemory(device, vertexBufferMemory, nullptr);
+            }
+            CreateOrResizeBuffer(vertexBuffer, vertexBufferMemory, currentVertexBufferSize,
+                vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         }
 
         // Create or resize index buffer
-        if (indexBuffer == VK_NULL_HANDLE || indexBufferSize > currentIndexBufferSize) {
-            CreateOrResizeBuffer(indexBuffer, indexBufferMemory, currentIndexBufferSize, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+        if (indexBuffer == VK_NULL_HANDLE || currentIndexBufferSize < indexBufferSize)
+        {
+            if (indexBuffer != VK_NULL_HANDLE)
+            {
+                std::cout << "Debug: Recreating index buffer" << std::endl;
+                vkDestroyBuffer(device, indexBuffer, nullptr);
+                vkFreeMemory(device, indexBufferMemory, nullptr);
+            }
+            CreateOrResizeBuffer(indexBuffer, indexBufferMemory, currentIndexBufferSize,
+                indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
         }
 
-        // Upload vertex and index data
+        // Map and upload data
         ImDrawVert* vtxDst = nullptr;
         ImDrawIdx* idxDst = nullptr;
+        VkResult err;
 
-        vkMapMemory(device, vertexBufferMemory, 0, vertexBufferSize, 0, (void**)&vtxDst);
-        vkMapMemory(device, indexBufferMemory, 0, indexBufferSize, 0, (void**)&idxDst);
+        err = vkMapMemory(device, vertexBufferMemory, 0, vertexBufferSize, 0, (void**)&vtxDst);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to map vertex memory" << std::endl;
+            return;
+        }
 
-        for (int n = 0; n < drawData->CmdListsCount; n++) {
+        err = vkMapMemory(device, indexBufferMemory, 0, indexBufferSize, 0, (void**)&idxDst);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to map index memory" << std::endl;
+            vkUnmapMemory(device, vertexBufferMemory);
+            return;
+        }
+
+        // Copy the data
+        for (int n = 0; n < drawData->CmdListsCount; n++)
+        {
             const ImDrawList* cmdList = drawData->CmdLists[n];
             memcpy(vtxDst, cmdList->VtxBuffer.Data, cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
             memcpy(idxDst, cmdList->IdxBuffer.Data, cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
@@ -343,8 +379,11 @@ namespace Walnut
             idxDst += cmdList->IdxBuffer.Size;
         }
 
+        // Unmap
         vkUnmapMemory(device, vertexBufferMemory);
         vkUnmapMemory(device, indexBufferMemory);
+
+        std::cout << "Debug: Successfully uploaded draw data" << std::endl;
     }
 
 
@@ -388,97 +427,187 @@ namespace Walnut
     }
 
 
-    void OffscreenPipeline::RecordCommandBuffer(ImDrawData* drawData) {
-        // Initialize command buffer begin info
-        VkCommandBufferBeginInfo commandBufferBeginInfo = {};
-        commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    void OffscreenPipeline::RecordCommandBuffer(ImDrawData* drawData)
+    {
+        auto const& device = Application::GetDevice();
+        std::cout << "Debug: Recording command buffer with draw data:" << std::endl;
+        std::cout << "  Display Size: " << drawData->DisplaySize.x << "x" << drawData->DisplaySize.y << std::endl;
+        std::cout << "  Display Pos: " << drawData->DisplayPos.x << "," << drawData->DisplayPos.y << std::endl;
+        std::cout << "  Framebuffer Scale: " << drawData->FramebufferScale.x << ","
+            << drawData->FramebufferScale.y << std::endl;
 
-        vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        // Initialize render pass begin info
-        VkRenderPassBeginInfo renderPassBeginInfo = {};
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBeginInfo.renderPass = renderPass;
-        renderPassBeginInfo.framebuffer = framebuffer;
-        renderPassBeginInfo.renderArea.offset = { 0, 0 };
-        renderPassBeginInfo.renderArea.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
+        VkResult err = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to begin command buffer" << std::endl;
+            return;
+        }
 
-        VkClearValue clearValue = {};
-        clearValue.color = { 1.0f, 0.0f, 1.0f, 1.0f };
-        renderPassBeginInfo.clearValueCount = 1;
-        renderPassBeginInfo.pClearValues = &clearValue;
+        // Initial transition to COLOR_ATTACHMENT_OPTIMAL
+        {
+            VkImageMemoryBarrier barrier = {};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = offscreenImage.GetVkImage();
+            barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+        }
 
-        // Bind pipeline
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        // Begin render pass
+        VkRenderPassBeginInfo renderPassInfo = {};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = renderPass;
+        renderPassInfo.framebuffer = framebuffer;
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
 
-        // Dynamically set the viewport
+        VkClearValue clearColor = { 0.2f, 0.3f, 0.3f, 1.0f };  // Teal color for debug
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearColor;
+
+        std::cout << "Debug: Setting clear color: " << clearColor.color.float32[0] << ","
+            << clearColor.color.float32[1] << "," << clearColor.color.float32[2] << ","
+            << clearColor.color.float32[3] << std::endl;
+
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // Set viewport and scissor
         VkViewport viewport = {};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float>(offscreenImage.GetWidth());
-        viewport.height = static_cast<float>(offscreenImage.GetHeight());
+        viewport.width = (float)offscreenImage.GetWidth();
+        viewport.height = (float)offscreenImage.GetHeight();
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-        // Push constants for the vertex shader
-        struct PushConstants {
-            float offset[2];
-            float scale[2];
-        };
+        VkRect2D scissor = {};
+        scissor.offset = { 0, 0 };
+        scissor.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        PushConstants pushConstants = {
-            {drawData->DisplayPos.x, drawData->DisplayPos.y}, // Offset
-            {1.0f / drawData->DisplaySize.x, 1.0f / drawData->DisplaySize.y} // Scale
-        };
+        // Bind pipeline
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
-        vkCmdPushConstants(
-            commandBuffer,
-            pipelineLayout,
-            VK_SHADER_STAGE_VERTEX_BIT,
-            0,
-            sizeof(PushConstants),
-            &pushConstants
-        );
+        // Set push constants
+        float scale[2];
+        float translate[2];
+        scale[0] = 2.0f / offscreenImage.GetWidth();
+        scale[1] = 2.0f / offscreenImage.GetHeight();
+        translate[0] = -1.0f;
+        translate[1] = -1.0f;
+
+        std::cout << "Debug: Push constants:" << std::endl;
+        std::cout << "  Scale: " << scale[0] << "," << scale[1] << std::endl;
+        std::cout << "  Translate: " << translate[0] << "," << translate[1] << std::endl;
+
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+            0, sizeof(float) * 2, scale);
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+            sizeof(float) * 2, sizeof(float) * 2, translate);
 
         // Bind vertex and index buffers
-        VkDeviceSize offsets[1] = { 0 };
+        VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
         vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-        // Render ImGui draw commands
+        // Debug buffer sizes
+        VkMemoryRequirements vertexReqs, indexReqs;
+        vkGetBufferMemoryRequirements(device, vertexBuffer, &vertexReqs);
+        vkGetBufferMemoryRequirements(device, indexBuffer, &indexReqs);
+        std::cout << "Debug: Buffer sizes:" << std::endl;
+        std::cout << "  Vertex buffer size: " << vertexReqs.size << std::endl;
+        std::cout << "  Index buffer size: " << indexReqs.size << std::endl;
+
+        // Draw
         int vertexOffset = 0;
         int indexOffset = 0;
+        std::cout << "Debug: Drawing " << drawData->CmdListsCount << " command lists" << std::endl;
 
-        for (int n = 0; n < drawData->CmdListsCount; n++) {
+        for (int n = 0; n < drawData->CmdListsCount; n++)
+        {
             const ImDrawList* cmdList = drawData->CmdLists[n];
-            for (int cmdIdx = 0; cmdIdx < cmdList->CmdBuffer.Size; cmdIdx++) {
-                const ImDrawCmd* pcmd = &cmdList->CmdBuffer[cmdIdx];
+            for (int cmd_i = 0; cmd_i < cmdList->CmdBuffer.Size; cmd_i++)
+            {
+                const ImDrawCmd* pcmd = &cmdList->CmdBuffer[cmd_i];
 
-                // Apply scissor
-                VkRect2D scissor;
-                scissor.offset.x = std::max((int32_t)pcmd->ClipRect.x, 0);
-                scissor.offset.y = std::max((int32_t)pcmd->ClipRect.y, 0);
-                scissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
-                scissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y);
-                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+                std::cout << "Debug: Command " << cmd_i << " clip rect: "
+                    << pcmd->ClipRect.x << "," << pcmd->ClipRect.y << " -> "
+                    << pcmd->ClipRect.z << "," << pcmd->ClipRect.w << std::endl;
 
-                // Bind texture (if used)
-                VkDescriptorSet descSet = (VkDescriptorSet)pcmd->GetTexID();
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descSet, 0, nullptr);
+                // Set scissor for this command
+                VkRect2D cmdScissor;
+                cmdScissor.offset.x = std::max((int32_t)(pcmd->ClipRect.x), 0);
+                cmdScissor.offset.y = std::max((int32_t)(pcmd->ClipRect.y), 0);
+                cmdScissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
+                cmdScissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y);
+                vkCmdSetScissor(commandBuffer, 0, 1, &cmdScissor);
 
-                // Draw indexed
-                vkCmdDrawIndexed(commandBuffer, pcmd->ElemCount, 1, indexOffset, vertexOffset, 0);
+                // Bind descriptor set for texture
+                VkDescriptorSet descSet = (VkDescriptorSet)pcmd->TextureId;
+                std::cout << "Debug: Command texture ID: " << (uint64_t)pcmd->TextureId << std::endl;
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    pipelineLayout, 0, 1, &descSet, 0, nullptr);
+
+                // Draw
+                vkCmdDrawIndexed(commandBuffer, pcmd->ElemCount, 1,
+                    indexOffset + pcmd->IdxOffset,
+                    vertexOffset + pcmd->VtxOffset, 0);
             }
             indexOffset += cmdList->IdxBuffer.Size;
             vertexOffset += cmdList->VtxBuffer.Size;
         }
 
         vkCmdEndRenderPass(commandBuffer);
-        vkEndCommandBuffer(commandBuffer);
+
+        // Transition to transfer source layout for reading back
+        {
+            VkImageMemoryBarrier barrier = {};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = offscreenImage.GetVkImage();
+            barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+            barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+        }
+
+        err = vkEndCommandBuffer(commandBuffer);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to end command buffer" << std::endl;
+            return;
+        }
+
+        std::cout << "Debug: Successfully recorded command buffer" << std::endl;
     }
 
 
@@ -486,13 +615,26 @@ namespace Walnut
 
     void OffscreenPipeline::Submit()
     {
+        std::cout << "Debug: Starting Submit" << std::endl;
+
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(queue);
+        VkResult err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to submit to queue" << std::endl;
+            return;
+        }
+
+        err = vkQueueWaitIdle(queue);
+        if (err != VK_SUCCESS) {
+            std::cout << "Error: Failed to wait for queue idle" << std::endl;
+            return;
+        }
+
+        std::cout << "Debug: Successfully submitted commands" << std::endl;
     }
 
 
