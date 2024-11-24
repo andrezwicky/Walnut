@@ -650,8 +650,7 @@ namespace Walnut
 		ImGui_ImplVulkan_Init(&init_info);
 
 
-		OffscreenImageSpec offscreenSpec;
-		m_OffscreenImage = new OffscreenImage(800, 600, ImageFormat::RGBA);
+		m_OffscreenImage = new OffscreenImage(m_OffscreenSpec.Width, m_OffscreenSpec.Height, ImageFormat::RGBA);
 		m_OffscreenPipeline = new OffscreenPipeline(g_Queue, *m_OffscreenImage);
 
 		//OffscreenImage offscreenImage(800, 600, ImageFormat::RGBA); // Example dimensions and format

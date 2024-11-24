@@ -35,8 +35,8 @@ namespace Walnut
 	struct OffscreenImageSpec
 	{
 		std::string Name = "Offscreen Image";
-		uint32_t Width = 1600;
-		uint32_t Height = 900;
+		uint32_t Width = 3200;  // 1600;
+		uint32_t Height = 1800; // 900;
 	};
 
 	class Application
@@ -65,6 +65,7 @@ namespace Walnut
 		GLFWwindow* GetWindowHandle() const { return m_WindowHandle; }
 		
 		OffscreenImage& GetOffScreenImage() { return *m_OffscreenImage; }
+		OffscreenImageSpec& GetOffScreenSpec() { return m_OffscreenSpec; }
 		OffscreenPipeline& GetOffScreenPipeline() { return *m_OffscreenPipeline; }
 
 
