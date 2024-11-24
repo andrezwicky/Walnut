@@ -170,8 +170,8 @@ namespace Walnut
             &region
         );
 
-        auto& queue = *Application::Get().GetQueue();
-        EndSingleTimeCommands(commandBuffer, &commandPool, &queue);
+        auto& m_Queue = *Application::Get().GetQueue();
+        EndSingleTimeCommands(commandBuffer, &commandPool, &m_Queue);
 
         // Read data from staging buffer
         void* mappedData;
@@ -285,7 +285,7 @@ namespace Walnut
 
         return commandBuffer;
     }
-    void OffscreenImage::EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue)
+    void OffscreenImage::EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue m_Queue)
     {
         VkDevice device = Walnut::Application::GetDevice();
 
@@ -298,11 +298,11 @@ namespace Walnut
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &commandBuffer;
 
-        if (vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+        if (vkQueueSubmit(m_Queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
             throw std::runtime_error("Failed to submit command buffer!");
         }
 
-        vkQueueWaitIdle(queue);
+        vkQueueWaitIdle(m_Queue);
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }

@@ -9,7 +9,7 @@ namespace Walnut
 {
     
     OffscreenPipeline::OffscreenPipeline(VkQueue queue, OffscreenImage& image)
-        : queue(queue), offscreenImage(image)
+        : m_Queue(queue), m_OffscreenImage(image)
     {
         CreateRenderPass();
         CreateFramebuffer();
@@ -20,11 +20,11 @@ namespace Walnut
     {
         VkDevice device = Walnut::Application::GetDevice();
 
-        vkDestroyFramebuffer(device, framebuffer, nullptr);
-        vkDestroyPipeline(device, pipeline, nullptr);
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-        vkDestroyRenderPass(device, renderPass, nullptr);
-        vkDestroyCommandPool(device, commandPool, nullptr);
+        vkDestroyFramebuffer(device, m_FrameBuffer, nullptr);
+        vkDestroyPipeline(device, m_PipeLine, nullptr);
+        vkDestroyPipelineLayout(device, m_PipeLineLayout, nullptr);
+        vkDestroyRenderPass(device, m_RenderPass, nullptr);
+        vkDestroyCommandPool(device, m_CommandPool, nullptr);
 
         // Cleanup descriptor set layout after pipeline creation
         vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
@@ -48,7 +48,7 @@ namespace Walnut
         std::cout << "Debug: Creating render pass" << std::endl;
 
         VkAttachmentDescription colorAttachment = {};
-        colorAttachment.format = offscreenImage.GetVkImageFormat();
+        colorAttachment.format = m_OffscreenImage.GetVkImageFormat();
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;  // Clear buffer at start
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -76,7 +76,7 @@ namespace Walnut
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
 
-        vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass);
+        vkCreateRenderPass(device, &renderPassInfo, nullptr, &m_RenderPass);
 
         std::cout << "Debug: Render pass created successfully" << std::endl;
     }
@@ -86,20 +86,20 @@ namespace Walnut
 
         VkFramebufferCreateInfo framebufferInfo = {};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
+        framebufferInfo.renderPass = m_RenderPass;
         framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = &offscreenImage.GetImageView();
-        framebufferInfo.width = offscreenImage.GetWidth();
-        framebufferInfo.height = offscreenImage.GetHeight();
+        framebufferInfo.pAttachments = &m_OffscreenImage.GetImageView();
+        framebufferInfo.width = m_OffscreenImage.GetWidth();
+        framebufferInfo.height = m_OffscreenImage.GetHeight();
         framebufferInfo.layers = 1;
 
-        vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffer);
+        vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_FrameBuffer);
     }
     void OffscreenPipeline::CreatePipeline()
     {
         auto const& device = Application::GetDevice();
         std::cout << "Debug: Creating pipeline with image dimensions: "
-            << offscreenImage.GetWidth() << "x" << offscreenImage.GetHeight() << std::endl;
+            << m_OffscreenImage.GetWidth() << "x" << m_OffscreenImage.GetHeight() << std::endl;
 
         // Debug print shader code sizes
         size_t vertSize = 0, fragSize = 0;
@@ -164,7 +164,7 @@ namespace Walnut
         pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
-        err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
+        err = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_PipeLineLayout);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to create pipeline layout" << std::endl;
             return;
@@ -271,12 +271,12 @@ namespace Walnut
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.layout = m_PipeLineLayout;
+        pipelineInfo.renderPass = m_RenderPass;
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        err = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline);
+        err = vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_PipeLine);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to create graphics pipeline" << std::endl;
             return;
@@ -296,15 +296,15 @@ namespace Walnut
         poolInfo.queueFamilyIndex = Utils::GetGraphicsQueueFamilyIndex(physicalDevice);
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-        vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool);
+        vkCreateCommandPool(device, &poolInfo, nullptr, &m_CommandPool);
 
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = commandPool;
+        allocInfo.commandPool = m_CommandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = 1;
 
-        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+        vkAllocateCommandBuffers(device, &allocInfo, &m_CommandBuffer);
     }
     void OffscreenPipeline::UploadDrawData(ImDrawData* drawData)
     {
@@ -326,28 +326,28 @@ namespace Walnut
             << ", Index size: " << indexBufferSize << std::endl;
 
         // Create or resize vertex buffer
-        if (vertexBuffer == VK_NULL_HANDLE || currentVertexBufferSize < vertexBufferSize)
+        if (m_VertexBuffer == VK_NULL_HANDLE || m_CurrentVertexBufferSize < vertexBufferSize)
         {
-            if (vertexBuffer != VK_NULL_HANDLE)
+            if (m_VertexBuffer != VK_NULL_HANDLE)
             {
                 std::cout << "Debug: Recreating vertex buffer" << std::endl;
-                vkDestroyBuffer(device, vertexBuffer, nullptr);
-                vkFreeMemory(device, vertexBufferMemory, nullptr);
+                vkDestroyBuffer(device, m_VertexBuffer, nullptr);
+                vkFreeMemory(device, m_VertexBufferMemory, nullptr);
             }
-            CreateOrResizeBuffer(vertexBuffer, vertexBufferMemory, currentVertexBufferSize,
+            CreateOrResizeBuffer(m_VertexBuffer, m_VertexBufferMemory, m_CurrentVertexBufferSize,
                 vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         }
 
         // Create or resize index buffer
-        if (indexBuffer == VK_NULL_HANDLE || currentIndexBufferSize < indexBufferSize)
+        if (m_IndexBuffer == VK_NULL_HANDLE || m_CurrentIndexBufferSize < indexBufferSize)
         {
-            if (indexBuffer != VK_NULL_HANDLE)
+            if (m_IndexBuffer != VK_NULL_HANDLE)
             {
                 std::cout << "Debug: Recreating index buffer" << std::endl;
-                vkDestroyBuffer(device, indexBuffer, nullptr);
-                vkFreeMemory(device, indexBufferMemory, nullptr);
+                vkDestroyBuffer(device, m_IndexBuffer, nullptr);
+                vkFreeMemory(device, m_IndexBufferMemory, nullptr);
             }
-            CreateOrResizeBuffer(indexBuffer, indexBufferMemory, currentIndexBufferSize,
+            CreateOrResizeBuffer(m_IndexBuffer, m_IndexBufferMemory, m_CurrentIndexBufferSize,
                 indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
         }
 
@@ -356,16 +356,16 @@ namespace Walnut
         ImDrawIdx* idxDst = nullptr;
         VkResult err;
 
-        err = vkMapMemory(device, vertexBufferMemory, 0, vertexBufferSize, 0, (void**)&vtxDst);
+        err = vkMapMemory(device, m_VertexBufferMemory, 0, vertexBufferSize, 0, (void**)&vtxDst);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to map vertex memory" << std::endl;
             return;
         }
 
-        err = vkMapMemory(device, indexBufferMemory, 0, indexBufferSize, 0, (void**)&idxDst);
+        err = vkMapMemory(device, m_IndexBufferMemory, 0, indexBufferSize, 0, (void**)&idxDst);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to map index memory" << std::endl;
-            vkUnmapMemory(device, vertexBufferMemory);
+            vkUnmapMemory(device, m_VertexBufferMemory);
             return;
         }
 
@@ -380,8 +380,8 @@ namespace Walnut
         }
 
         // Unmap
-        vkUnmapMemory(device, vertexBufferMemory);
-        vkUnmapMemory(device, indexBufferMemory);
+        vkUnmapMemory(device, m_VertexBufferMemory);
+        vkUnmapMemory(device, m_IndexBufferMemory);
 
         std::cout << "Debug: Successfully uploaded draw data" << std::endl;
     }
@@ -440,7 +440,7 @@ namespace Walnut
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-        VkResult err = vkBeginCommandBuffer(commandBuffer, &beginInfo);
+        VkResult err = vkBeginCommandBuffer(m_CommandBuffer, &beginInfo);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to begin command buffer" << std::endl;
             return;
@@ -454,13 +454,13 @@ namespace Walnut
             barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = offscreenImage.GetVkImage();
+            barrier.image = m_OffscreenImage.GetVkImage();
             barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
             vkCmdPipelineBarrier(
-                commandBuffer,
+                m_CommandBuffer,
                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                 0,
@@ -473,10 +473,10 @@ namespace Walnut
         // Begin render pass
         VkRenderPassBeginInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffer;
+        renderPassInfo.renderPass = m_RenderPass;
+        renderPassInfo.framebuffer = m_FrameBuffer;
         renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
+        renderPassInfo.renderArea.extent = { m_OffscreenImage.GetWidth(), m_OffscreenImage.GetHeight() };
 
         VkClearValue clearColor = { 0.2f, 0.3f, 0.3f, 1.0f };  // Teal color for debug
         renderPassInfo.clearValueCount = 1;
@@ -486,31 +486,31 @@ namespace Walnut
             << clearColor.color.float32[1] << "," << clearColor.color.float32[2] << ","
             << clearColor.color.float32[3] << std::endl;
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBeginRenderPass(m_CommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         // Set viewport and scissor
         VkViewport viewport = {};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = (float)offscreenImage.GetWidth();
-        viewport.height = (float)offscreenImage.GetHeight();
+        viewport.width = (float)m_OffscreenImage.GetWidth();
+        viewport.height = (float)m_OffscreenImage.GetHeight();
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdSetViewport(m_CommandBuffer, 0, 1, &viewport);
 
         VkRect2D scissor = {};
         scissor.offset = { 0, 0 };
-        scissor.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        scissor.extent = { m_OffscreenImage.GetWidth(), m_OffscreenImage.GetHeight() };
+        vkCmdSetScissor(m_CommandBuffer, 0, 1, &scissor);
 
         // Bind pipeline
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdBindPipeline(m_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipeLine);
 
         // Set push constants
         float scale[2];
         float translate[2];
-        scale[0] = 2.0f / offscreenImage.GetWidth();
-        scale[1] = 2.0f / offscreenImage.GetHeight();
+        scale[0] = 2.0f / m_OffscreenImage.GetWidth();
+        scale[1] = 2.0f / m_OffscreenImage.GetHeight();
         translate[0] = -1.0f;
         translate[1] = -1.0f;
 
@@ -518,20 +518,20 @@ namespace Walnut
         std::cout << "  Scale: " << scale[0] << "," << scale[1] << std::endl;
         std::cout << "  Translate: " << translate[0] << "," << translate[1] << std::endl;
 
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+        vkCmdPushConstants(m_CommandBuffer, m_PipeLineLayout, VK_SHADER_STAGE_VERTEX_BIT,
             0, sizeof(float) * 2, scale);
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+        vkCmdPushConstants(m_CommandBuffer, m_PipeLineLayout, VK_SHADER_STAGE_VERTEX_BIT,
             sizeof(float) * 2, sizeof(float) * 2, translate);
 
         // Bind vertex and index buffers
         VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindVertexBuffers(m_CommandBuffer, 0, 1, &m_VertexBuffer, offsets);
+        vkCmdBindIndexBuffer(m_CommandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
         // Debug buffer sizes
         VkMemoryRequirements vertexReqs, indexReqs;
-        vkGetBufferMemoryRequirements(device, vertexBuffer, &vertexReqs);
-        vkGetBufferMemoryRequirements(device, indexBuffer, &indexReqs);
+        vkGetBufferMemoryRequirements(device, m_VertexBuffer, &vertexReqs);
+        vkGetBufferMemoryRequirements(device, m_IndexBuffer, &indexReqs);
         std::cout << "Debug: Buffer sizes:" << std::endl;
         std::cout << "  Vertex buffer size: " << vertexReqs.size << std::endl;
         std::cout << "  Index buffer size: " << indexReqs.size << std::endl;
@@ -558,16 +558,16 @@ namespace Walnut
                 cmdScissor.offset.y = std::max((int32_t)(pcmd->ClipRect.y), 0);
                 cmdScissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
                 cmdScissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y);
-                vkCmdSetScissor(commandBuffer, 0, 1, &cmdScissor);
+                vkCmdSetScissor(m_CommandBuffer, 0, 1, &cmdScissor);
 
                 // Bind descriptor set for texture
                 VkDescriptorSet descSet = (VkDescriptorSet)pcmd->TextureId;
                 std::cout << "Debug: Command texture ID: " << (uint64_t)pcmd->TextureId << std::endl;
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    pipelineLayout, 0, 1, &descSet, 0, nullptr);
+                vkCmdBindDescriptorSets(m_CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_PipeLineLayout, 0, 1, &descSet, 0, nullptr);
 
                 // Draw
-                vkCmdDrawIndexed(commandBuffer, pcmd->ElemCount, 1,
+                vkCmdDrawIndexed(m_CommandBuffer, pcmd->ElemCount, 1,
                     indexOffset + pcmd->IdxOffset,
                     vertexOffset + pcmd->VtxOffset, 0);
             }
@@ -575,7 +575,7 @@ namespace Walnut
             vertexOffset += cmdList->VtxBuffer.Size;
         }
 
-        vkCmdEndRenderPass(commandBuffer);
+        vkCmdEndRenderPass(m_CommandBuffer);
 
         // Transition to transfer source layout for reading back
         {
@@ -585,13 +585,13 @@ namespace Walnut
             barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = offscreenImage.GetVkImage();
+            barrier.image = m_OffscreenImage.GetVkImage();
             barrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
             barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
             vkCmdPipelineBarrier(
-                commandBuffer,
+                m_CommandBuffer,
                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                 VK_PIPELINE_STAGE_TRANSFER_BIT,
                 0,
@@ -601,7 +601,7 @@ namespace Walnut
             );
         }
 
-        err = vkEndCommandBuffer(commandBuffer);
+        err = vkEndCommandBuffer(m_CommandBuffer);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to end command buffer" << std::endl;
             return;
@@ -620,15 +620,15 @@ namespace Walnut
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffer;
+        submitInfo.pCommandBuffers = &m_CommandBuffer;
 
-        VkResult err = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+        VkResult err = vkQueueSubmit(m_Queue, 1, &submitInfo, VK_NULL_HANDLE);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to submit to queue" << std::endl;
             return;
         }
 
-        err = vkQueueWaitIdle(queue);
+        err = vkQueueWaitIdle(m_Queue);
         if (err != VK_SUCCESS) {
             std::cout << "Error: Failed to wait for queue idle" << std::endl;
             return;

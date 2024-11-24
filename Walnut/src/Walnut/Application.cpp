@@ -771,9 +771,9 @@ namespace Walnut
 		check_vk_result(err);
 
 		// Free resources in queue
-		for (auto& queue : s_ResourceFreeQueue)
+		for (auto& m_Queue : s_ResourceFreeQueue)
 		{
-			for (auto& func : queue)
+			for (auto& func : m_Queue)
 				func();
 		}
 		s_ResourceFreeQueue.clear();
