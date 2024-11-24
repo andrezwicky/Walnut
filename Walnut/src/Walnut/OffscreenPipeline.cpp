@@ -93,7 +93,13 @@ namespace Walnut
         framebufferInfo.height = m_OffscreenImage.GetHeight();
         framebufferInfo.layers = 1;
 
-        vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_FrameBuffer);
+        std::cout << "Debug: Creating framebuffer with dimensions: "
+            << m_OffscreenImage.GetWidth() << "x"
+            << m_OffscreenImage.GetHeight() << std::endl;
+
+        VkResult result = vkCreateFramebuffer(device, &framebufferInfo, nullptr, &m_FrameBuffer);
+        if (result != VK_SUCCESS)
+            throw std::runtime_error("Failed to create offscreen framebuffer!");
     }
     void OffscreenPipeline::CreatePipeline()
     {

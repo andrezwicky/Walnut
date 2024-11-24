@@ -649,6 +649,8 @@ namespace Walnut
 		init_info.CheckVkResultFn = check_vk_result;
 		ImGui_ImplVulkan_Init(&init_info);
 
+
+		OffscreenImageSpec offscreenSpec;
 		m_OffscreenImage = new OffscreenImage(800, 600, ImageFormat::RGBA);
 		m_OffscreenPipeline = new OffscreenPipeline(g_Queue, *m_OffscreenImage);
 
