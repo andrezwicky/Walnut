@@ -509,7 +509,7 @@ void RecordCommandBuffer(VkCommandBuffer commandBuffer, VkFramebuffer framebuffe
 	renderPassInfo.renderArea.extent = { width, height };
 
 	// Clear values
-	VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} }; // Clear to black
+	VkClearValue clearColor = { {{1.0f, 0.0f, 0.0f, 1.0f}} }; // Clear to black
 	renderPassInfo.clearValueCount = 1;
 	renderPassInfo.pClearValues = &clearColor;
 
@@ -959,6 +959,19 @@ namespace Walnut
 	VkDevice Application::GetDevice()
 	{
 		return g_Device;
+	}
+
+	VkCommandPool Application::GetCommandPool()
+	{
+		ImGui_ImplVulkanH_Window* wd = &g_MainWindowData;
+		// Use any command queue
+		VkCommandPool command_pool = wd->Frames[wd->FrameIndex].CommandPool;
+		return command_pool;
+	}
+
+	VkQueue Application::GetQueue()
+	{
+		return g_Queue;
 	}
 
 	VkCommandBuffer Application::GetCommandBuffer(bool begin)

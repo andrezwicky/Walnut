@@ -13,5 +13,6 @@ namespace Walnut
 		static uint32_t BytesPerPixel(ImageFormat format);
 		static VkFormat WalnutFormatToVulkanFormat(ImageFormat format);
 		static uint32_t GetGraphicsQueueFamilyIndex(VkPhysicalDevice physicalDevice);
+		static uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 	};
 }

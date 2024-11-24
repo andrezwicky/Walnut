@@ -22,6 +22,12 @@ namespace Walnut
 		uint32_t GetWidth() const { return m_Width; }
 		uint32_t GetHeight() const { return m_Height; }
 
+		void ReadBack(void* data, size_t dataSize);
+
+		
+
+		
+
 	private:
 		void AllocateMemory(uint64_t size, bool makesource = false);
 		// Allocate memory for the Vulkan image.
@@ -49,6 +55,12 @@ namespace Walnut
 		size_t m_AlignedSize = 0;
 
 		VkDescriptorSet m_DescriptorSet = nullptr;
+
+		void TransitionImageLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
+
+		VkCommandBuffer BeginSingleTimeCommands(VkCommandPool commandPool);
+		void EndSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue);
+
 	};
 }
 

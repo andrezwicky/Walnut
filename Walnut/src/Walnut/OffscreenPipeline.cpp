@@ -7,7 +7,7 @@
 
 namespace Walnut
 {
-
+    
     OffscreenPipeline::OffscreenPipeline(VkQueue queue, OffscreenImage& image)
         : queue(queue), offscreenImage(image)
     {
@@ -94,11 +94,11 @@ namespace Walnut
 
         // Define the Descriptor Set Layout (Step 1)
         VkDescriptorSetLayoutBinding samplerBinding = {};
-        samplerBinding.binding = 0;                                 // Binding 0 in the shader
+        samplerBinding.binding = 0;
         samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerBinding.descriptorCount = 1;                        // One texture sampler
-        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;  // Used in the fragment shader
-        samplerBinding.pImmutableSamplers = nullptr;               // No immutable samplers
+        samplerBinding.descriptorCount = 1;
+        samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        samplerBinding.pImmutableSamplers = nullptr;
 
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo = {};
         descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -117,9 +117,9 @@ namespace Walnut
         // Create Pipeline Layout (Step 2)
         VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1; // Reference descriptor set layout
+        pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 1;             // Reference push constant range
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
         pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
@@ -221,6 +221,17 @@ namespace Walnut
         viewportState.scissorCount = 1;
         viewportState.pScissors = &scissor;
 
+        // === Dynamic State ===
+        std::array<VkDynamicState, 2> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
         // === Rasterization State ===
         VkPipelineRasterizationStateCreateInfo rasterizer = {};
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -267,6 +278,7 @@ namespace Walnut
         pipelineInfo.pRasterizationState = &rasterizer;
         pipelineInfo.pMultisampleState = &multisampling;
         pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = &dynamicState; // Enable dynamic state here
         pipelineInfo.layout = pipelineLayout;
         pipelineInfo.renderPass = renderPass;
         pipelineInfo.subpass = 0;
@@ -274,9 +286,8 @@ namespace Walnut
         if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create graphics pipeline!");
         }
-
-
     }
+
 
 
     void OffscreenPipeline::AllocateCommandBuffer() {
@@ -298,33 +309,181 @@ namespace Walnut
 
         vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
     }
-    void OffscreenPipeline::RecordCommandBuffer()
+    void OffscreenPipeline::UploadDrawData(ImDrawData* drawData)
     {
-        VkDevice device = Walnut::Application::GetDevice();
+        auto const& device = Application::GetDevice();
+        if (!drawData || drawData->TotalVtxCount == 0) return;
 
-        VkCommandBufferBeginInfo beginInfo = {};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        // Calculate required buffer sizes
+        VkDeviceSize vertexBufferSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
+        VkDeviceSize indexBufferSize = drawData->TotalIdxCount * sizeof(ImDrawIdx);
 
-        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+        // Create or resize vertex buffer
+        if (vertexBuffer == VK_NULL_HANDLE || vertexBufferSize > currentVertexBufferSize) {
+            CreateOrResizeBuffer(vertexBuffer, vertexBufferMemory, currentVertexBufferSize, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        }
 
-        VkRenderPassBeginInfo renderPassInfo = {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffer;
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
-        VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor;
+        // Create or resize index buffer
+        if (indexBuffer == VK_NULL_HANDLE || indexBufferSize > currentIndexBufferSize) {
+            CreateOrResizeBuffer(indexBuffer, indexBufferMemory, currentIndexBufferSize, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+        }
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        // Upload vertex and index data
+        ImDrawVert* vtxDst = nullptr;
+        ImDrawIdx* idxDst = nullptr;
 
-        // Add your draw commands here
+        vkMapMemory(device, vertexBufferMemory, 0, vertexBufferSize, 0, (void**)&vtxDst);
+        vkMapMemory(device, indexBufferMemory, 0, indexBufferSize, 0, (void**)&idxDst);
+
+        for (int n = 0; n < drawData->CmdListsCount; n++) {
+            const ImDrawList* cmdList = drawData->CmdLists[n];
+            memcpy(vtxDst, cmdList->VtxBuffer.Data, cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+            memcpy(idxDst, cmdList->IdxBuffer.Data, cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+            vtxDst += cmdList->VtxBuffer.Size;
+            idxDst += cmdList->IdxBuffer.Size;
+        }
+
+        vkUnmapMemory(device, vertexBufferMemory);
+        vkUnmapMemory(device, indexBufferMemory);
+    }
+
+
+    void OffscreenPipeline::CreateOrResizeBuffer(VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceSize& currentSize, VkDeviceSize newSize, VkBufferUsageFlags usage)
+    {
+        auto const& device = Application::GetDevice();
+        if (buffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, buffer, nullptr);
+        }
+        if (bufferMemory != VK_NULL_HANDLE) {
+            vkFreeMemory(device, bufferMemory, nullptr);
+        }
+
+        // Create new buffer
+        VkBufferCreateInfo bufferInfo = {};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = newSize;
+        bufferInfo.usage = usage;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create buffer!");
+        }
+
+        // Allocate memory for the buffer
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+        VkMemoryAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memRequirements.size;
+        allocInfo.memoryTypeIndex = Utils::FindMemoryType( memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
+            throw std::runtime_error("Failed to allocate buffer memory!");
+
+        vkBindBufferMemory(device, buffer, bufferMemory, 0);
+
+        // Update current size
+        currentSize = newSize;
+    }
+
+
+    void OffscreenPipeline::RecordCommandBuffer(ImDrawData* drawData) {
+        // Initialize command buffer begin info
+        VkCommandBufferBeginInfo commandBufferBeginInfo = {};
+        commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+
+        // Initialize render pass begin info
+        VkRenderPassBeginInfo renderPassBeginInfo = {};
+        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBeginInfo.renderPass = renderPass;
+        renderPassBeginInfo.framebuffer = framebuffer;
+        renderPassBeginInfo.renderArea.offset = { 0, 0 };
+        renderPassBeginInfo.renderArea.extent = { offscreenImage.GetWidth(), offscreenImage.GetHeight() };
+
+        VkClearValue clearValue = {};
+        clearValue.color = { 1.0f, 0.0f, 1.0f, 1.0f };
+        renderPassBeginInfo.clearValueCount = 1;
+        renderPassBeginInfo.pClearValues = &clearValue;
+
+        vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // Bind pipeline
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+        // Dynamically set the viewport
+        VkViewport viewport = {};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(offscreenImage.GetWidth());
+        viewport.height = static_cast<float>(offscreenImage.GetHeight());
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        // Push constants for the vertex shader
+        struct PushConstants {
+            float offset[2];
+            float scale[2];
+        };
+
+        PushConstants pushConstants = {
+            {drawData->DisplayPos.x, drawData->DisplayPos.y}, // Offset
+            {1.0f / drawData->DisplaySize.x, 1.0f / drawData->DisplaySize.y} // Scale
+        };
+
+        vkCmdPushConstants(
+            commandBuffer,
+            pipelineLayout,
+            VK_SHADER_STAGE_VERTEX_BIT,
+            0,
+            sizeof(PushConstants),
+            &pushConstants
+        );
+
+        // Bind vertex and index buffers
+        VkDeviceSize offsets[1] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, offsets);
+        vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+        // Render ImGui draw commands
+        int vertexOffset = 0;
+        int indexOffset = 0;
+
+        for (int n = 0; n < drawData->CmdListsCount; n++) {
+            const ImDrawList* cmdList = drawData->CmdLists[n];
+            for (int cmdIdx = 0; cmdIdx < cmdList->CmdBuffer.Size; cmdIdx++) {
+                const ImDrawCmd* pcmd = &cmdList->CmdBuffer[cmdIdx];
+
+                // Apply scissor
+                VkRect2D scissor;
+                scissor.offset.x = std::max((int32_t)pcmd->ClipRect.x, 0);
+                scissor.offset.y = std::max((int32_t)pcmd->ClipRect.y, 0);
+                scissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
+                scissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y);
+                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+                // Bind texture (if used)
+                VkDescriptorSet descSet = (VkDescriptorSet)pcmd->GetTexID();
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descSet, 0, nullptr);
+
+                // Draw indexed
+                vkCmdDrawIndexed(commandBuffer, pcmd->ElemCount, 1, indexOffset, vertexOffset, 0);
+            }
+            indexOffset += cmdList->IdxBuffer.Size;
+            vertexOffset += cmdList->VtxBuffer.Size;
+        }
 
         vkCmdEndRenderPass(commandBuffer);
-
         vkEndCommandBuffer(commandBuffer);
     }
+
+
+
+
     void OffscreenPipeline::Submit()
     {
         VkSubmitInfo submitInfo = {};

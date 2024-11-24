@@ -71,6 +71,8 @@ namespace Walnut
 		static VkInstance GetInstance();
 		static VkPhysicalDevice GetPhysicalDevice();
 		static VkDevice GetDevice();
+		VkCommandPool GetCommandPool();
+		VkQueue GetQueue();
 
 		static VkCommandBuffer GetCommandBuffer(bool begin);
 		static VkCommandBuffer GetCommandBufferOffscreen(bool begin);
