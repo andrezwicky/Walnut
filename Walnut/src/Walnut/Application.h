@@ -11,6 +11,7 @@
 #include "imgui_internal.h"
 #include "implot.h"
 #include "vulkan/vulkan.h"
+#include "Walnut/Types.h"
 
 
 void check_vk_result(VkResult err);
@@ -25,19 +26,7 @@ namespace Walnut
 	class OffscreenImage;
 	class OffscreenPipeline;
 
-	struct ApplicationSpecification
-	{
-		std::string Name = "Walnut App";
-		uint32_t Width = 1600;
-		uint32_t Height = 900;
-	};
 
-	struct OffscreenImageSpec
-	{
-		std::string Name = "Offscreen Image";
-		uint32_t Width = 3200;  // 1600;
-		uint32_t Height = 1800; // 900;
-	};
 
 	class Application
 	{

@@ -333,29 +333,11 @@ namespace Walnut
 
         // Create or resize vertex buffer
         if (m_VertexBuffer == VK_NULL_HANDLE || m_CurrentVertexBufferSize < vertexBufferSize)
-        {
-            if (m_VertexBuffer != VK_NULL_HANDLE)
-            {
-                std::cout << "Debug: Recreating vertex buffer" << std::endl;
-                vkDestroyBuffer(device, m_VertexBuffer, nullptr);
-                vkFreeMemory(device, m_VertexBufferMemory, nullptr);
-            }
-            CreateOrResizeBuffer(m_VertexBuffer, m_VertexBufferMemory, m_CurrentVertexBufferSize,
-                vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-        }
+            CreateOrResizeBuffer(m_VertexBuffer, m_VertexBufferMemory, m_CurrentVertexBufferSize, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
         // Create or resize index buffer
         if (m_IndexBuffer == VK_NULL_HANDLE || m_CurrentIndexBufferSize < indexBufferSize)
-        {
-            if (m_IndexBuffer != VK_NULL_HANDLE)
-            {
-                std::cout << "Debug: Recreating index buffer" << std::endl;
-                vkDestroyBuffer(device, m_IndexBuffer, nullptr);
-                vkFreeMemory(device, m_IndexBufferMemory, nullptr);
-            }
-            CreateOrResizeBuffer(m_IndexBuffer, m_IndexBufferMemory, m_CurrentIndexBufferSize,
-                indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-        }
+            CreateOrResizeBuffer(m_IndexBuffer, m_IndexBufferMemory, m_CurrentIndexBufferSize, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
         // Map and upload data
         ImDrawVert* vtxDst = nullptr;
@@ -396,11 +378,19 @@ namespace Walnut
     void OffscreenPipeline::CreateOrResizeBuffer(VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceSize& currentSize, VkDeviceSize newSize, VkBufferUsageFlags usage)
     {
         auto const& device = Application::GetDevice();
+
+        vkDeviceWaitIdle(device);
+
+        // Destroy old buffer if it exists
         if (buffer != VK_NULL_HANDLE) {
             vkDestroyBuffer(device, buffer, nullptr);
+            buffer = VK_NULL_HANDLE; // Set to null to avoid dangling references
         }
+
+        // Free old memory if it exists
         if (bufferMemory != VK_NULL_HANDLE) {
             vkFreeMemory(device, bufferMemory, nullptr);
+            bufferMemory = VK_NULL_HANDLE; // Set to null to avoid double-free
         }
 
         // Create new buffer

@@ -17,6 +17,7 @@ namespace Walnut
 
 		VkImage GetVkImage() { return m_Image; }
 		VkImageView& GetImageView() { return m_ImageView; }
+		VkDescriptorSet GetDescriptorSet() const { return m_DescriptorSet; }
 		VkFormat GetVkImageFormat() const { return Utils::WalnutFormatToVulkanFormat(m_Format); }
 		uint32_t GetWidth() const { return m_Width; }
 		uint32_t GetHeight() const { return m_Height; }
@@ -44,6 +45,7 @@ namespace Walnut
 		VkImage						m_Image = nullptr;
 		VkImageView					m_ImageView = nullptr;
 		VkDeviceMemory				m_Memory = nullptr;
+		VkSampler					m_Sampler = nullptr;
 		VkDescriptorSet				m_DescriptorSet = nullptr;
 
 		VkBuffer					m_StagingBuffer = nullptr;

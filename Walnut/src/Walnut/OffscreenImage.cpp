@@ -2,6 +2,7 @@
 
 #include "Walnut/Application.h"
 #include "OffscreenImage.h"
+#include <backends/imgui_impl_vulkan.h>
 
 
 namespace Walnut
@@ -37,14 +38,11 @@ namespace Walnut
                 : (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
             imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
             err = vkCreateImage(device, &imageInfo, nullptr, &m_Image);
             check_vk_result(err);
-
             // Allocate memory for the image
             VkMemoryRequirements memRequirements;
             vkGetImageMemoryRequirements(device, m_Image, &memRequirements);
-
             VkMemoryAllocateInfo allocInfo = {};
             allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             allocInfo.allocationSize = memRequirements.size;
