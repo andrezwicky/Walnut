@@ -488,7 +488,7 @@ void CreateRenderPass()
 
 void RecordCommandBuffer(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer, VkRenderPass renderPass, uint32_t width, uint32_t height)
 {
-	// Reset command buffer to ensure it’s in the READY state
+	// Reset command buffer to ensure itï¿½s in the READY state
 	if (vkResetCommandBuffer(commandBuffer, 0) != VK_SUCCESS)
 		throw std::runtime_error("Failed to reset command buffer!");
 
@@ -554,6 +554,9 @@ namespace Walnut
 			delete m_OffscreenPipeline;
 		if (m_OffscreenImage)
 			delete m_OffscreenImage;
+		m_OffscreenPipeline = nullptr;
+		m_OffscreenImage = nullptr;
+
 		Shutdown();
 
 		s_Instance = nullptr;
