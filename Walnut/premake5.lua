@@ -17,6 +17,7 @@ project "Walnut"
       "../vendor/stb_image",
       "../vendor/ImGuiTextSelect",
       "../vendor/utfcpp",
+      "../vendor/nfd",
 
       "%{IncludeDir.VulkanSDK}",
       "%{IncludeDir.glm}",
@@ -29,6 +30,7 @@ project "Walnut"
        "GLFW",
        "yaml-cpp",
        "ImGuiTextSelect",
+       "nfd", "ole32", "uuid", "shell32",
 
        "%{Library.Vulkan}"
    }
@@ -42,17 +44,20 @@ project "Walnut"
 
    filter "configurations:Debug"
       defines { "WL_DEBUG" }
+      libdirs { "../vendor/lib/debug" }
       runtime "Debug"
       symbols "On"
 
    filter "configurations:Release"
       defines { "WL_RELEASE" }
+      libdirs { "../vendor/lib/release" }
       runtime "Release"
       optimize "On"
       symbols "On"
 
    filter "configurations:Dist"
       defines { "WL_DIST" }
+      libdirs { "../vendor/lib/release" }
       runtime "Release"
       optimize "On"
       symbols "Off"
