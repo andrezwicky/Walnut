@@ -20,26 +20,54 @@ namespace Walnut
     {
         VkDevice device = Walnut::Application::GetDevice();
 
-        vkDestroyFramebuffer(device, m_FrameBuffer, nullptr);
-        vkDestroyPipeline(device, m_PipeLine, nullptr);
-        vkDestroyPipelineLayout(device, m_PipeLineLayout, nullptr);
-        vkDestroyRenderPass(device, m_RenderPass, nullptr);
-        vkDestroyCommandPool(device, m_CommandPool, nullptr);
+        if (m_FrameBuffer != VK_NULL_HANDLE)
+            vkDestroyFramebuffer(device, m_FrameBuffer, nullptr);
 
-        // Cleanup descriptor set layout after pipeline creation
-        vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
+        if (m_RenderPass != VK_NULL_HANDLE)
+            vkDestroyRenderPass(device, m_RenderPass, nullptr);
 
-        if (m_VertShaderModule)
-        {
+        if (m_PipeLine != VK_NULL_HANDLE)
+            vkDestroyPipeline(device, m_PipeLine, nullptr);
+
+        if (m_PipeLineLayout != VK_NULL_HANDLE)
+            vkDestroyPipelineLayout(device, m_PipeLineLayout, nullptr);
+
+        if (m_DescriptorSetLayout != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
+
+        if (m_CommandPool != VK_NULL_HANDLE)
+            vkDestroyCommandPool(device, m_CommandPool, nullptr);
+
+        if (m_VertShaderModule != VK_NULL_HANDLE)
             vkDestroyShaderModule(device, m_VertShaderModule, nullptr);
-            m_VertShaderModule = VK_NULL_HANDLE;
-        }
 
-        if (m_FragShaderModule)
-        {
+        if (m_FragShaderModule != VK_NULL_HANDLE)
             vkDestroyShaderModule(device, m_FragShaderModule, nullptr);
-            m_FragShaderModule = VK_NULL_HANDLE;
-        }
+
+        if (m_VertexBuffer != VK_NULL_HANDLE)
+            vkDestroyBuffer(device, m_VertexBuffer, nullptr);
+
+        if (m_VertexBufferMemory != VK_NULL_HANDLE)
+            vkFreeMemory(device, m_VertexBufferMemory, nullptr);
+
+        if (m_IndexBuffer != VK_NULL_HANDLE)
+            vkDestroyBuffer(device, m_IndexBuffer, nullptr);
+
+        if (m_IndexBufferMemory != VK_NULL_HANDLE)
+            vkFreeMemory(device, m_IndexBufferMemory, nullptr);
+
+        m_FrameBuffer = VK_NULL_HANDLE;
+        m_RenderPass = VK_NULL_HANDLE;
+        m_PipeLine = VK_NULL_HANDLE;
+        m_PipeLineLayout = VK_NULL_HANDLE;
+        m_DescriptorSetLayout = VK_NULL_HANDLE;
+        m_CommandPool = VK_NULL_HANDLE;
+        m_VertShaderModule = VK_NULL_HANDLE;
+        m_FragShaderModule = VK_NULL_HANDLE;
+        m_VertexBuffer = VK_NULL_HANDLE;
+        m_VertexBufferMemory = VK_NULL_HANDLE;
+        m_IndexBuffer = VK_NULL_HANDLE;
+        m_IndexBufferMemory = VK_NULL_HANDLE;
     }
     void OffscreenPipeline::CreateRenderPass()
     {

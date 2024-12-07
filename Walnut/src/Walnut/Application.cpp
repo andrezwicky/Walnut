@@ -898,6 +898,10 @@ namespace Walnut
 				if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
 				{
 					ImGuiID dockspace_id = ImGui::GetID("PoroPlotAppDockspace");
+
+					if (ImGui::DockBuilderGetNode(dockspace_id) == NULL)
+						SetDefaultLayout(dockspace_id, dockspace_flags);
+
 					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 				}
 				
@@ -955,6 +959,26 @@ namespace Walnut
 	void Application::Close()
 	{
 		m_Running = false;
+	}
+
+	void Application::SetDefaultLayout(ImGuiID& dockspace_id, ImGuiDockNodeFlags& dockspace_flags)
+	{
+		int width, height;
+		glfwGetFramebufferSize(m_WindowHandle, &width, &height);
+
+		ImGui::DockBuilderRemoveNode(dockspace_id); // Clear out existing layout
+		ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags); // Add empty node
+		ImGui::DockBuilderSetNodeSize(dockspace_id, ImVec2(width, height));
+
+		ImGuiID dock_main_id = dockspace_id; // This variable will track the document node, however we are not using it here as we aren't docking anything into it.
+		ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.35f, NULL, &dock_main_id);
+		ImGuiID dock_id_leftbottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, NULL, &dock_main_id);
+		ImGuiID dock_id_lefttop = dock_main_id;
+
+		ImGui::DockBuilderDockWindow("Workspace", dock_id_leftbottom);
+		ImGui::DockBuilderDockWindow("Plot", dock_id_lefttop);
+		ImGui::DockBuilderDockWindow("Finder", dock_id_right);
+		ImGui::DockBuilderFinish(dockspace_id);
 	}
 
 	float Application::GetTime()
