@@ -581,7 +581,7 @@ namespace Walnut
 		glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 		glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 		m_WindowHandle = glfwCreateWindow(m_Specification.Width, m_Specification.Height, m_Specification.Name.c_str(), NULL, NULL);	
-		glfwSetWindowAspectRatio(m_WindowHandle, 16, 9);
+		//glfwSetWindowAspectRatio(m_WindowHandle, 16, 9);
 
 
 		// Setup Vulkan
