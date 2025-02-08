@@ -17,6 +17,7 @@
 
 // Emedded font
 #include "ImGui/Roboto-Regular.embed"
+#include "ImGui/HafferSQ-Light.h"
 #include "OffscreenImage.h"
 #include "OffscreenPipeline.h"
 
@@ -728,12 +729,12 @@ namespace Walnut
 		// Load default font
 		ImFontConfig fontConfig;
 		fontConfig.FontDataOwnedByAtlas = false;
-		fontConfig.RasterizerDensity = 1.2;
-		fontConfig.OversampleH = 2;
-		fontConfig.OversampleV = 2;
+		fontConfig.RasterizerDensity = 1.6;
+		//fontConfig.SizePixels = 0.001;
+		fontConfig.OversampleH = 8;
+		fontConfig.OversampleV = 8;
 		//fontConfig.
 		ImFont* robotoFont = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f, &fontConfig);
-		io.FontDefault = robotoFont;
 
 		ImFontConfig fontConfig_sharper = fontConfig;
 		//fontConfig_sharper.FontDataOwnedByAtlas = true;
@@ -742,6 +743,17 @@ namespace Walnut
 		fontConfig_sharper.OversampleH = 5;
 		fontConfig_sharper.OversampleV = 5;
 		ImFont* robotoFont_sharper = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f, &fontConfig_sharper);
+
+		ImFontConfig fontConfig_hafferLight;
+		fontConfig_hafferLight.FontDataOwnedByAtlas = false;
+		fontConfig_hafferLight.RasterizerDensity = 1.6;
+		//fontConfig.SizePixels = 0.001;
+		fontConfig_hafferLight.OversampleH = 8;
+		fontConfig_hafferLight.OversampleV = 8;
+		//fontConfig.
+		ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF((void*)g_HafferSQlight_data, g_HafferSQlight_size, 18.0f, &fontConfig_hafferLight);
+		io.FontDefault = hafferLightFont;
+		io.FontGlobalScale = 1.2;
 
 		// Upload Fonts
 		{
