@@ -5,7 +5,12 @@ project "Walnut"
    targetdir "bin/%{cfg.buildcfg}"
    staticruntime "off"
 
-   files { "src/**.h", "src/**.cpp" }
+   files
+   {
+   "src/**.h",
+   "src/**.cpp",
+   "../vendor/nfd/src/nfd_win.cpp"
+   }
 
    includedirs
    {
@@ -30,7 +35,7 @@ project "Walnut"
        "GLFW",
        "yaml-cpp",
        "ImGuiTextSelect",
-       "nfd", "ole32", "uuid", "shell32",
+       "ole32", "uuid", "shell32",
 
        "%{Library.Vulkan}"
    }
@@ -40,7 +45,7 @@ project "Walnut"
 
    filter "system:windows"
       systemversion "latest"
-      defines { "WL_PLATFORM_WINDOWS", "YAML_CPP_STATIC_DEFINE" }
+      defines { "WL_PLATFORM_WINDOWS", "YAML_CPP_STATIC_DEFINE", "NFD_OVERRIDE_RECENT_WITH_DEFAULT=1"}
 
    filter "configurations:Debug"
       defines { "WL_DEBUG" }
