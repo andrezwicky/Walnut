@@ -52,6 +52,7 @@ namespace Walnut
 
 		void SetDefaultLayout(ImGuiID& dockspace_id, ImGuiDockNodeFlags& dockspace_flags);
 
+		float GetScaleDPI() const { return m_Specification.ScaleDPI; }
 		float GetTime();
 		GLFWwindow* GetWindowHandle() const { return m_WindowHandle; }
 		
