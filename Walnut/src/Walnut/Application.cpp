@@ -586,9 +586,14 @@ namespace Walnut
 
 		float xscale, yscale;
 		glfwGetWindowContentScale(m_WindowHandle, &xscale, &yscale);
-		m_Specification.ScaleDPI = xscale;
+		
 		if (xscale != 1)
+		{
+			xscale *= 0.85; 
+			m_Specification.ScaleDPI = xscale;
 			glfwSetWindowSize(m_WindowHandle, m_Specification.Width * xscale, m_Specification.Height * xscale);
+		}
+			
 
 		// Setup Vulkan
 		if (!glfwVulkanSupported())
