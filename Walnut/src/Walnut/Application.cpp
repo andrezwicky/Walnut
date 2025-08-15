@@ -583,12 +583,20 @@ namespace Walnut
 		glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
 		m_WindowHandle = glfwCreateWindow(m_Specification.Width, m_Specification.Height, m_Specification.Name.c_str(), NULL, NULL);	
 		//glfwSetWindowAspectRatio(m_WindowHandle, 16, 9);
+		glfwSetWindowUserPointer(m_WindowHandle, this);
+		glfwSetWindowContentScaleCallback(m_WindowHandle, WindowContentScaleCallback);
 
 		float xscale, yscale;
 		glfwGetWindowContentScale(m_WindowHandle, &xscale, &yscale);
-		m_Specification.ScaleDPI = xscale;
+		m_CurrentMonitor = GetCurrentMonitor();
+
 		if (xscale != 1)
-			glfwSetWindowSize(m_WindowHandle, m_Specification.Width * xscale, m_Specification.Height * xscale);
+		{
+			m_CurrentDPIScale = xscale * 0.85;
+			m_Specification.ScaleDPI = m_CurrentDPIScale;
+			glfwSetWindowSize(m_WindowHandle, m_Specification.Width * m_CurrentDPIScale, m_Specification.Height * m_CurrentDPIScale);
+		}
+
 
 		// Setup Vulkan
 		if (!glfwVulkanSupported())
@@ -848,9 +856,38 @@ namespace Walnut
 			// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
 			// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 			glfwPollEvents();
+			CheckAndUpdateDPI();
 
 			for (auto& layer : m_LayerStack)
 				layer->OnUpdate(m_TimeStep);
+
+			if (m_DPIChanged)
+			{
+				m_DPIChanged = false;
+
+				// Reload fonts with new scale
+				ImGuiIO& io = ImGui::GetIO();
+				io.Fonts->Clear();
+
+				// Reload your fonts here with the new scale
+				ImFontConfig fontConfig;
+				fontConfig.FontDataOwnedByAtlas = false;
+				fontConfig.RasterizerDensity = 1.6f;
+				fontConfig.OversampleH = 8;
+				fontConfig.OversampleV = 8;
+
+				// Re-add fonts with new DPI scale
+				ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF(
+					(void*)g_HafferSQlight_data,
+					g_HafferSQlight_size,
+					18.0f * m_CurrentDPIScale,
+					&fontConfig
+				);
+				io.FontDefault = hafferLightFont;
+
+				// Rebuild font atlas
+				ImGui_ImplVulkan_CreateFontsTexture();
+			}
 
 			// Resize swap chain?
 			if (g_SwapChainRebuild)
@@ -998,6 +1035,113 @@ namespace Walnut
 		ImGui::DockBuilderDockWindow("Plot", dock_id_lefttop);
 		ImGui::DockBuilderDockWindow("Finder", dock_id_right);
 		ImGui::DockBuilderFinish(dockspace_id);
+	}
+
+	GLFWmonitor* Application::GetCurrentMonitor()
+	{
+		int windowX, windowY, windowWidth, windowHeight;
+		glfwGetWindowPos(m_WindowHandle, &windowX, &windowY);
+		glfwGetWindowSize(m_WindowHandle, &windowWidth, &windowHeight);
+
+		int monitorCount;
+		GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+
+		GLFWmonitor* bestMonitor = nullptr;
+		int bestOverlap = 0;
+
+		for (int i = 0; i < monitorCount; i++)
+		{
+			const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
+			int monitorX, monitorY;
+			glfwGetMonitorPos(monitors[i], &monitorX, &monitorY);
+
+			// Calculate overlap area
+			int overlapLeft = std::max(windowX, monitorX);
+			int overlapTop = std::max(windowY, monitorY);
+			int overlapRight = std::min(windowX + windowWidth, monitorX + mode->width);
+			int overlapBottom = std::min(windowY + windowHeight, monitorY + mode->height);
+
+			if (overlapRight > overlapLeft && overlapBottom > overlapTop)
+			{
+				int overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop);
+				if (overlapArea > bestOverlap)
+				{
+					bestOverlap = overlapArea;
+					bestMonitor = monitors[i];
+				}
+			}
+		}
+
+		return bestMonitor ? bestMonitor : glfwGetPrimaryMonitor();
+	}
+
+	void Application::CheckAndUpdateDPI()
+	{
+		GLFWmonitor* currentMonitor = GetCurrentMonitor();
+
+		// Check if we've moved to a different monitor
+		if (currentMonitor != m_CurrentMonitor)
+		{
+			m_CurrentMonitor = currentMonitor;
+
+			// Get the new monitor's DPI scale
+			float xscale, yscale;
+			glfwGetMonitorContentScale(currentMonitor, &xscale, &yscale);
+
+			if (std::abs(xscale - m_CurrentDPIScale) > 0.01f) // Avoid floating point precision issues
+			{
+				float oldScale = m_CurrentDPIScale;
+				m_CurrentDPIScale = xscale;
+				m_Specification.ScaleDPI = xscale;
+				m_DPIChanged = true;
+
+				// Update ImGui scaling
+				ImGuiIO& io = ImGui::GetIO();
+				ImGuiStyle& style = ImGui::GetStyle();
+
+				// Scale fonts
+				io.FontGlobalScale = 1.2f * xscale;
+
+				// Scale UI elements
+				style.ScaleAllSizes(xscale / oldScale);
+
+				// Optionally resize window to maintain consistent logical size
+				int currentWidth, currentHeight;
+				glfwGetWindowSize(m_WindowHandle, &currentWidth, &currentHeight);
+				int newWidth = (int)((currentWidth / oldScale) * xscale);
+				int newHeight = (int)((currentHeight / oldScale) * xscale);
+				glfwSetWindowSize(m_WindowHandle, newWidth, newHeight);
+
+				// Force swapchain rebuild for new DPI
+				g_SwapChainRebuild = true;
+
+				std::cout << "DPI changed from " << oldScale << " to " << xscale << std::endl;
+			}
+		}
+	}
+
+	void Application::WindowContentScaleCallback(GLFWwindow* window, float xscale, float yscale)
+	{
+		Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+		if (app)
+		{
+			float oldScale = app->m_CurrentDPIScale;
+			app->m_CurrentDPIScale = xscale;
+			app->m_Specification.ScaleDPI = xscale;
+			app->m_DPIChanged = true;
+
+			// Update ImGui scaling immediately
+			ImGuiIO& io = ImGui::GetIO();
+			ImGuiStyle& style = ImGui::GetStyle();
+
+			io.FontGlobalScale = 1.2f * xscale;
+			style.ScaleAllSizes(xscale / oldScale);
+
+			// Force swapchain rebuild
+			g_SwapChainRebuild = true;
+
+			std::cout << "DPI scale callback: " << xscale << std::endl;
+		}
 	}
 
 	float Application::GetTime()

@@ -17,7 +17,7 @@
 void check_vk_result(VkResult err);
 
 struct GLFWwindow;
-
+struct GLFWmonitor;
 
 
 namespace Walnut
@@ -73,13 +73,23 @@ namespace Walnut
 		static void FlushCommandBufferOffscreen(VkCommandBuffer commandBuffer);
 
 		static void SubmitResourceFree(std::function<void()>&& func);
+
 	private:
 		void Init();
 		void Shutdown();
+
+		void CheckAndUpdateDPI();
+		GLFWmonitor* GetCurrentMonitor();
+		static void WindowContentScaleCallback(GLFWwindow* window, float xscale, float yscale);
+
 	private:
 		ApplicationSpecification m_Specification;
 		GLFWwindow* m_WindowHandle = nullptr;
 		bool m_Running = false;
+
+		GLFWmonitor* m_CurrentMonitor = nullptr;
+		float m_CurrentDPIScale = 1.0f;
+		bool m_DPIChanged = false;
 
 		OffscreenImage* m_OffscreenImage = nullptr;
 		OffscreenPipeline* m_OffscreenPipeline = nullptr;
