@@ -581,20 +581,19 @@ namespace Walnut
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); 
 		glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 		glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+		glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 		m_WindowHandle = glfwCreateWindow(m_Specification.Width, m_Specification.Height, m_Specification.Name.c_str(), NULL, NULL);	
-		//glfwSetWindowAspectRatio(m_WindowHandle, 16, 9);
+
+
 		glfwSetWindowUserPointer(m_WindowHandle, this);
 		glfwSetWindowContentScaleCallback(m_WindowHandle, WindowContentScaleCallback);
 
-		float xscale, yscale;
-		glfwGetWindowContentScale(m_WindowHandle, &xscale, &yscale);
-		m_CurrentMonitor = GetCurrentMonitor();
+		glfwGetWindowContentScale(m_WindowHandle, &m_Specification.ScaleDPI.x, &m_Specification.ScaleDPI.y);
 
-		if (xscale != 1)
+		if (m_Specification.ScaleDPI.x != 1)
 		{
-			m_CurrentDPIScale = xscale * 0.85;
-			m_Specification.ScaleDPI = m_CurrentDPIScale;
-			glfwSetWindowSize(m_WindowHandle, m_Specification.Width * m_CurrentDPIScale, m_Specification.Height * m_CurrentDPIScale);
+			m_Specification.ScaleDPI.x *= 0.85;
+			glfwSetWindowSize(m_WindowHandle, m_Specification.Width * m_Specification.ScaleDPI.x, m_Specification.Height * m_Specification.ScaleDPI.x);
 		}
 
 
@@ -739,36 +738,10 @@ namespace Walnut
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-		// Load default font
-		ImFontConfig fontConfig;
-		fontConfig.FontDataOwnedByAtlas = false;
-		fontConfig.RasterizerDensity = 1.6;
-		//fontConfig.SizePixels = 0.001;
-		fontConfig.OversampleH = 8;
-		fontConfig.OversampleV = 8;
-		//fontConfig.
-		ImFont* robotoFont = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f * xscale, &fontConfig);
+		if (!BuildFonts(m_Specification.ScaleDPI.x))
+			std::cerr << "Failed to build fonts!\n";
 
-		ImFontConfig fontConfig_sharper = fontConfig;
-		//fontConfig_sharper.FontDataOwnedByAtlas = true;
-		fontConfig_sharper.RasterizerMultiply = 1.5;
-		fontConfig_sharper.RasterizerDensity = 2.0;
-		fontConfig_sharper.OversampleH = 5;
-		fontConfig_sharper.OversampleV = 5;
-		ImFont* robotoFont_sharper = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f * xscale, &fontConfig_sharper);
-
-		ImFontConfig fontConfig_hafferLight;
-		fontConfig_hafferLight.FontDataOwnedByAtlas = false;
-		fontConfig_hafferLight.RasterizerDensity = 1.6;
-		//fontConfig.SizePixels = 0.001;
-		fontConfig_hafferLight.OversampleH = 8;
-		fontConfig_hafferLight.OversampleV = 8;
-		//fontConfig.
-		ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF((void*)g_HafferSQlight_data, g_HafferSQlight_size, 18.0f * xscale, &fontConfig_hafferLight);
-		io.FontDefault = hafferLightFont;
-		io.FontGlobalScale = 1.2;
-
-		style.ScaleAllSizes(xscale);
+		style.ScaleAllSizes(m_Specification.ScaleDPI.x);
 
 		// Upload Fonts
 		{
@@ -856,7 +829,6 @@ namespace Walnut
 			// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
 			// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 			glfwPollEvents();
-			CheckAndUpdateDPI();
 
 			for (auto& layer : m_LayerStack)
 				layer->OnUpdate(m_TimeStep);
@@ -864,29 +836,8 @@ namespace Walnut
 			if (m_DPIChanged)
 			{
 				m_DPIChanged = false;
-
-				// Reload fonts with new scale
-				ImGuiIO& io = ImGui::GetIO();
-				io.Fonts->Clear();
-
-				// Reload your fonts here with the new scale
-				ImFontConfig fontConfig;
-				fontConfig.FontDataOwnedByAtlas = false;
-				fontConfig.RasterizerDensity = 1.6f;
-				fontConfig.OversampleH = 8;
-				fontConfig.OversampleV = 8;
-
-				// Re-add fonts with new DPI scale
-				ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF(
-					(void*)g_HafferSQlight_data,
-					g_HafferSQlight_size,
-					18.0f * m_CurrentDPIScale,
-					&fontConfig
-				);
-				io.FontDefault = hafferLightFont;
-
-				// Rebuild font atlas
-				ImGui_ImplVulkan_CreateFontsTexture();
+				if (BuildFonts(m_Specification.ScaleDPI.x))
+					ImGui_ImplVulkan_CreateFontsTexture();
 			}
 
 			// Resize swap chain?
@@ -1017,6 +968,47 @@ namespace Walnut
 		m_Running = false;
 	}
 
+	bool Application::BuildFonts(float scale)
+	{
+		ImGuiIO& io = ImGui::GetIO();
+
+		// Clear existing fonts
+		io.Fonts->Clear();
+
+		// Regular Roboto font - scales with DPI
+		ImFontConfig fontConfig_Roboto;
+		fontConfig_Roboto.FontDataOwnedByAtlas = false;
+		fontConfig_Roboto.RasterizerDensity = 1.6;
+		fontConfig_Roboto.OversampleH = 8;
+		fontConfig_Roboto.OversampleV = 8;
+		ImFont* robotoFont = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f * m_Specification.ScaleDPI.x, &fontConfig_Roboto);
+
+		// Export Roboto font - fixed size
+		ImFontConfig fontConfig_RobotoExport = fontConfig_Roboto;
+		//fontConfig_RobotoExport.FontDataOwnedByAtlas = true;
+		fontConfig_RobotoExport.RasterizerMultiply = 1.5;
+		fontConfig_RobotoExport.RasterizerDensity = 2.0;
+		fontConfig_RobotoExport.OversampleH = 5;
+		fontConfig_RobotoExport.OversampleV = 5;
+		ImFont* robotoFont_sharper = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f, &fontConfig_RobotoExport);
+
+		// Regular Haffer font - scales with DPI
+		ImFontConfig fontConfig_HafferLight;
+		fontConfig_HafferLight.FontDataOwnedByAtlas = false;
+		fontConfig_HafferLight.RasterizerDensity = 1.6;
+		fontConfig_HafferLight.OversampleH = 8;
+		fontConfig_HafferLight.OversampleV = 8;
+		ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF((void*)g_HafferSQlight_data, g_HafferSQlight_size, 18.0f * m_Specification.ScaleDPI.x, &fontConfig_HafferLight);
+
+		if (io.Fonts->Fonts.Size == 0)
+			return false;
+
+		io.FontDefault = hafferLightFont;
+		io.FontGlobalScale = 1.2;
+
+		return true;
+	}
+
 	void Application::SetDefaultLayout(ImGuiID& dockspace_id, ImGuiDockNodeFlags& dockspace_flags)
 	{
 		int width, height;
@@ -1037,104 +1029,20 @@ namespace Walnut
 		ImGui::DockBuilderFinish(dockspace_id);
 	}
 
-	GLFWmonitor* Application::GetCurrentMonitor()
-	{
-		int windowX, windowY, windowWidth, windowHeight;
-		glfwGetWindowPos(m_WindowHandle, &windowX, &windowY);
-		glfwGetWindowSize(m_WindowHandle, &windowWidth, &windowHeight);
-
-		int monitorCount;
-		GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
-
-		GLFWmonitor* bestMonitor = nullptr;
-		int bestOverlap = 0;
-
-		for (int i = 0; i < monitorCount; i++)
-		{
-			const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
-			int monitorX, monitorY;
-			glfwGetMonitorPos(monitors[i], &monitorX, &monitorY);
-
-			// Calculate overlap area
-			int overlapLeft = std::max(windowX, monitorX);
-			int overlapTop = std::max(windowY, monitorY);
-			int overlapRight = std::min(windowX + windowWidth, monitorX + mode->width);
-			int overlapBottom = std::min(windowY + windowHeight, monitorY + mode->height);
-
-			if (overlapRight > overlapLeft && overlapBottom > overlapTop)
-			{
-				int overlapArea = (overlapRight - overlapLeft) * (overlapBottom - overlapTop);
-				if (overlapArea > bestOverlap)
-				{
-					bestOverlap = overlapArea;
-					bestMonitor = monitors[i];
-				}
-			}
-		}
-
-		return bestMonitor ? bestMonitor : glfwGetPrimaryMonitor();
-	}
-
-	void Application::CheckAndUpdateDPI()
-	{
-		GLFWmonitor* currentMonitor = GetCurrentMonitor();
-
-		// Check if we've moved to a different monitor
-		if (currentMonitor != m_CurrentMonitor)
-		{
-			m_CurrentMonitor = currentMonitor;
-
-			// Get the new monitor's DPI scale
-			float xscale, yscale;
-			glfwGetMonitorContentScale(currentMonitor, &xscale, &yscale);
-
-			if (std::abs(xscale - m_CurrentDPIScale) > 0.01f) // Avoid floating point precision issues
-			{
-				float oldScale = m_CurrentDPIScale;
-				m_CurrentDPIScale = xscale;
-				m_Specification.ScaleDPI = xscale;
-				m_DPIChanged = true;
-
-				// Update ImGui scaling
-				ImGuiIO& io = ImGui::GetIO();
-				ImGuiStyle& style = ImGui::GetStyle();
-
-				// Scale fonts
-				io.FontGlobalScale = 1.2f * xscale;
-
-				// Scale UI elements
-				style.ScaleAllSizes(xscale / oldScale);
-
-				// Optionally resize window to maintain consistent logical size
-				int currentWidth, currentHeight;
-				glfwGetWindowSize(m_WindowHandle, &currentWidth, &currentHeight);
-				int newWidth = (int)((currentWidth / oldScale) * xscale);
-				int newHeight = (int)((currentHeight / oldScale) * xscale);
-				glfwSetWindowSize(m_WindowHandle, newWidth, newHeight);
-
-				// Force swapchain rebuild for new DPI
-				g_SwapChainRebuild = true;
-
-				std::cout << "DPI changed from " << oldScale << " to " << xscale << std::endl;
-			}
-		}
-	}
-
 	void Application::WindowContentScaleCallback(GLFWwindow* window, float xscale, float yscale)
 	{
 		Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (app)
 		{
-			float oldScale = app->m_CurrentDPIScale;
-			app->m_CurrentDPIScale = xscale;
-			app->m_Specification.ScaleDPI = xscale;
+			float oldScale = app->m_Specification.ScaleDPI.x;
+			app->m_Specification.ScaleDPI.x = xscale;
 			app->m_DPIChanged = true;
 
 			// Update ImGui scaling immediately
 			ImGuiIO& io = ImGui::GetIO();
 			ImGuiStyle& style = ImGui::GetStyle();
 
-			io.FontGlobalScale = 1.2f * xscale;
+			//io.FontGlobalScale = 1.2f;
 			style.ScaleAllSizes(xscale / oldScale);
 
 			// Force swapchain rebuild

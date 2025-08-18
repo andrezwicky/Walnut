@@ -9,10 +9,17 @@ namespace Walnut
         RGBA32F,
         GBR3P
     };
+
+
+	struct Scale
+	{
+		float x = 1;
+		float y = 1;
+	};
 	struct ApplicationSpecification
 	{
 		std::string Name = "Walnut App";
-		float ScaleDPI = 1;
+		Scale ScaleDPI{};
 		uint32_t Width = 1600;
 		uint32_t Height = 900;
 	};

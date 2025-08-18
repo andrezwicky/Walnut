@@ -51,8 +51,8 @@ namespace Walnut
 		void Close();
 
 		void SetDefaultLayout(ImGuiID& dockspace_id, ImGuiDockNodeFlags& dockspace_flags);
-
-		float GetScaleDPI() const { return m_Specification.ScaleDPI; }
+		bool BuildFonts(float scale);
+		float GetScaleDPI() const { return m_Specification.ScaleDPI.x; }
 		float GetTime();
 		GLFWwindow* GetWindowHandle() const { return m_WindowHandle; }
 		
@@ -78,17 +78,12 @@ namespace Walnut
 		void Init();
 		void Shutdown();
 
-		void CheckAndUpdateDPI();
-		GLFWmonitor* GetCurrentMonitor();
 		static void WindowContentScaleCallback(GLFWwindow* window, float xscale, float yscale);
 
 	private:
 		ApplicationSpecification m_Specification;
 		GLFWwindow* m_WindowHandle = nullptr;
 		bool m_Running = false;
-
-		GLFWmonitor* m_CurrentMonitor = nullptr;
-		float m_CurrentDPIScale = 1.0f;
 		bool m_DPIChanged = false;
 
 		OffscreenImage* m_OffscreenImage = nullptr;
