@@ -981,7 +981,7 @@ namespace Walnut
 		fontConfig_Roboto.RasterizerDensity = 1.6;
 		fontConfig_Roboto.OversampleH = 8;
 		fontConfig_Roboto.OversampleV = 8;
-		ImFont* robotoFont = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f * m_Specification.ScaleDPI.x, &fontConfig_Roboto);
+		ImFont* robotoFont = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 1.2f * 20.0f * m_Specification.ScaleDPI.x, &fontConfig_Roboto);
 
 		// Export Roboto font - fixed size
 		ImFontConfig fontConfig_RobotoExport = fontConfig_Roboto;
@@ -990,7 +990,7 @@ namespace Walnut
 		fontConfig_RobotoExport.RasterizerDensity = 2.0;
 		fontConfig_RobotoExport.OversampleH = 5;
 		fontConfig_RobotoExport.OversampleV = 5;
-		ImFont* robotoFont_sharper = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 20.0f, &fontConfig_RobotoExport);
+		ImFont* robotoFont_sharper = io.Fonts->AddFontFromMemoryTTF((void*)g_RobotoRegular, sizeof(g_RobotoRegular), 1.2f * 20.0f, &fontConfig_RobotoExport);
 
 		// Regular Haffer font - scales with DPI
 		ImFontConfig fontConfig_HafferLight;
@@ -998,13 +998,13 @@ namespace Walnut
 		fontConfig_HafferLight.RasterizerDensity = 1.6;
 		fontConfig_HafferLight.OversampleH = 8;
 		fontConfig_HafferLight.OversampleV = 8;
-		ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF((void*)g_HafferSQlight_data, g_HafferSQlight_size, 18.0f * m_Specification.ScaleDPI.x, &fontConfig_HafferLight);
+		ImFont* hafferLightFont = io.Fonts->AddFontFromMemoryTTF((void*)g_HafferSQlight_data, g_HafferSQlight_size, 1.2f * 18.0f * m_Specification.ScaleDPI.x, &fontConfig_HafferLight);
 
 		if (io.Fonts->Fonts.Size == 0)
 			return false;
 
 		io.FontDefault = hafferLightFont;
-		io.FontGlobalScale = 1.2;
+		//io.FontGlobalScale = 1.2;
 
 		return true;
 	}
